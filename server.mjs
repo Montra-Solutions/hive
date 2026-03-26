@@ -28,29 +28,33 @@ let CONFIG = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, ''
 
 // Load .env from repo root
 dotenv.config({ path: join(__dirname, '.env') });
-// Load API .env for DB credentials (don't override existing vars)
+// Capture PORT before loading API .env (which may define its own PORT)
+const PORT = parseInt(process.env.PORT || CONFIG.port || '3333', 10);
+// Load API .env for DB credentials only — restore PORT so API's value doesn't hijack the dashboard
 const apiRepoDir = CONFIG.services?.api?.repoDir;
 if (apiRepoDir) {
   dotenv.config({ path: join(__dirname, '..', apiRepoDir, '.env'), override: false });
 }
-const PORT = parseInt(process.env.PORT || '3333', 10);
+process.env.PORT = String(PORT); // ensure dashboard port wins
 const isWindows = process.platform === 'win32';
 
 // ---------------------------------------------------------------------------
 // Base path resolution — reads from config, falls back to auto-detect
 // ---------------------------------------------------------------------------
 function resolveBasePath() {
-  const candidates = isWindows
-    ? [CONFIG.basePaths?.windows].filter(Boolean)
-    : [CONFIG.basePaths?.mac].filter(Boolean);
-
-  // Also try parent of the dashboard directory (../../..)
-  candidates.push(join(__dirname, '..', '..', '..'));
+  const candidates = [
+    // Prefer explicit projectsDir from config (set by setup)
+    CONFIG.projectsDir,
+    // Legacy basePaths format
+    isWindows ? CONFIG.basePaths?.windows : CONFIG.basePaths?.mac,
+    // Fallback: parent of the hive directory
+    join(__dirname, '..'),
+  ].filter(Boolean);
 
   for (const dir of candidates) {
     if (existsSync(dir)) return dir;
   }
-  console.error('ERROR: Cannot locate project directories. Check basePaths in dashboard.config.json');
+  console.error('ERROR: Cannot locate project directories. Check projectsDir in dashboard.config.json');
   process.exit(1);
 }
 
