@@ -70,9 +70,6 @@ const BASE_DIR = resolveBasePath();
 // ---------------------------------------------------------------------------
 // Repo list — from config
 // ---------------------------------------------------------------------------
-const REPO_DEFS = CONFIG.repos || [];
-
-// Resolve each def to { name, dir } — skip entries where no directory exists
 // Resolve a path alias to an absolute directory.
 // If the alias is already absolute (e.g. "D:\\repos\\x"), use it directly.
 // Otherwise join it under BASE_DIR.
@@ -80,15 +77,17 @@ function resolveRepoPath(alias) {
   return isAbsolute(alias) ? alias : join(BASE_DIR, alias);
 }
 
-const REPOS_RESOLVED = REPO_DEFS.map(def => {
-  if (typeof def === 'string') {
-    return { name: def, dir: def };
-  }
-  const [displayName, ...aliases] = def;
-  const found = aliases.find(a => existsSync(join(resolveRepoPath(a), '.git')));
-  return { name: displayName, dir: found || aliases[0] };
-});
-const REPOS = REPOS_RESOLVED.map(r => r.name);
+function buildReposResolved(defs) {
+  return (defs || []).map(def => {
+    if (typeof def === 'string') return { name: def, dir: def };
+    const [displayName, ...aliases] = def;
+    const found = aliases.find(a => existsSync(join(resolveRepoPath(a), '.git')));
+    return { name: displayName, dir: found || aliases[0] };
+  });
+}
+
+let REPOS_RESOLVED = buildReposResolved(CONFIG.repos);
+let REPOS = REPOS_RESOLVED.map(r => r.name);
 
 function repoDir(name) {
   const entry = REPOS_RESOLVED.find(r => r.name === name);
@@ -593,7 +592,10 @@ app.put('/api/config', express.json(), (req, res) => {
     // Update in-memory config
     Object.keys(CONFIG).forEach(k => delete CONFIG[k]);
     Object.assign(CONFIG, newConfig);
-    res.json({ ok: true, message: 'Config saved. Some changes may require a dashboard restart.' });
+    // Rebuild repo list so changes take effect without a restart
+    REPOS_RESOLVED = buildReposResolved(CONFIG.repos);
+    REPOS = REPOS_RESOLVED.map(r => r.name);
+    res.json({ ok: true, message: 'Config saved.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
