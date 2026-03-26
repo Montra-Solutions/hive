@@ -30,7 +30,8 @@ if (!existsSync(CONFIG_PATH)) {
     process.exit(1);
   }
 }
-let CONFIG = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, ''));
+const _configRaw = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '').trim();
+let CONFIG = _configRaw ? JSON.parse(_configRaw) : {};
 
 // Load .env from repo root
 dotenv.config({ path: join(__dirname, '.env') });
