@@ -152,15 +152,17 @@ WIDGET_REGISTRY['contributions'] = {
     ).join('');
 
     // Hex grid geometry — flat-top hexagons with staggered columns
-    const HR       = 5;                    // radius (center to vertex)
-    const HH       = HR * Math.sqrt(3);    // flat-to-flat height ≈ 8.66
-    const COL_STEP = HR * 1.5;             // x spacing between column centers = 7.5
-    const STAGGER  = HH / 2;              // y shift for odd-indexed columns ≈ 4.33
-    const GX       = 14;                   // left offset (room for day labels)
-    const GY       = 16;                   // top offset (room for month labels)
+    const HR       = 7;                    // radius (center to vertex)
+    const HH       = HR * Math.sqrt(3);    // flat-to-flat height ≈ 12.12
+    const GAP      = 2;                    // gap between adjacent hexes
+    const COL_STEP = HR * 1.5 + GAP;      // x spacing between column centers
+    const ROW_STEP = HH + GAP;            // y spacing between rows within a column
+    const STAGGER  = ROW_STEP / 2;        // y shift for odd-indexed columns
+    const GX       = 16;                   // left offset (room for day labels)
+    const GY       = 18;                   // top offset (room for month labels)
 
     function colX(col)      { return GX + HR + col * COL_STEP; }
-    function rowY(row, col) { return GY + (col % 2 === 1 ? STAGGER : 0) + row * HH; }
+    function rowY(row, col) { return GY + (col % 2 === 1 ? STAGGER : 0) + row * ROW_STEP; }
     function hexPts(cx, cy) {
       let s = '';
       for (let i = 0; i < 6; i++) {
@@ -171,7 +173,7 @@ WIDGET_REGISTRY['contributions'] = {
     }
 
     const svgW = Math.ceil(GX + HR + (totalWeeks - 1) * COL_STEP + HR + 4);
-    const svgH = Math.ceil(GY + STAGGER + 6 * HH + HH / 2 + 4);
+    const svgH = Math.ceil(GY + STAGGER + 6 * ROW_STEP + HH / 2 + 4);
 
     const monthSvg = monthMarks.map(({ weekIdx: wi, label }) =>
       `<text x="${colX(wi).toFixed(1)}" y="11" class="contrib-svg-label">${esc(label)}</text>`
