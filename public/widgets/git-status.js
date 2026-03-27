@@ -3,6 +3,7 @@
 WIDGET_REGISTRY['git-status'] = {
   title: 'Repositories',
   icon: '\uD83D\uDCCB',
+  settingsKey: 'repos',
   defaultSize: { w: 6, h: 4 },
   minW: 3,
   minH: 2,

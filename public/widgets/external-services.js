@@ -3,6 +3,7 @@
 WIDGET_REGISTRY['external-services'] = {
   title: 'External Services',
   icon: '\uD83C\uDF10',
+  settingsKey: 'externalMonitors',
   defaultSize: { w: 4, h: 4 },
   minW: 3,
   minH: 2,

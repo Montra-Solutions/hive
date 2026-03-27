@@ -1000,6 +1000,7 @@ function addWidgetToGrid(widgetId, layoutItem) {
         <span class="widget-drag-handle">\u2630</span>
         <span class="widget-title">${reg.title}</span>
         <div class="widget-controls">
+          ${reg.settingsKey ? `<button class="widget-btn widget-settings" title="Settings" data-settings-key="${reg.settingsKey}">\u2699</button>` : ''}
           <button class="widget-btn widget-refresh" title="Refresh">\u21BB</button>
           <button class="widget-btn widget-popout" title="Pop Out">\u29C9</button>
           <button class="widget-btn widget-to-tab" title="Move to Tab">\u21E5</button>
@@ -1051,6 +1052,21 @@ function addWidgetToGrid(widgetId, layoutItem) {
   chrome.querySelector('.widget-close').addEventListener('click', () => {
     removeWidgetFromGrid(widgetId);
   });
+
+  const settingsBtn = chrome.querySelector('.widget-settings');
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+      switchTab('settings');
+      setTimeout(() => {
+        const section = document.querySelector(`.settings-section-body[data-section="${settingsBtn.dataset.settingsKey}"]`);
+        if (section) {
+          const details = section.closest('details');
+          if (details) details.open = true;
+          section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    });
+  }
 
   activeWidgets[widgetId] = { widget: reg, element: gsWidget };
   updateWidgetPicker();

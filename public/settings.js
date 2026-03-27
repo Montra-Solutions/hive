@@ -378,6 +378,7 @@ function renderSectionBody(section) {
     const obj = _settingsConfig[section.configKey] || {};
     html += `<div class="settings-keyed-objects" data-config-key="${section.configKey}">`;
     for (const [key, val] of Object.entries(obj)) {
+      if (val == null) continue;
       html += renderKeyedObjectRow(section, key, val);
     }
     html += `<div class="settings-keyed-add-row">`;

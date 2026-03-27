@@ -3,6 +3,7 @@
 WIDGET_REGISTRY['cli-tools'] = {
   title: 'CLI Tools',
   icon: '\u2318',
+  settingsKey: 'cliTools',
   defaultSize: { w: 6, h: 5 },
   minW: 3,
   minH: 3,

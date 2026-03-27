@@ -3,7 +3,7 @@
 WIDGET_REGISTRY['claude-usage'] = {
   title: 'Claude Usage',
   icon: '\uD83E\uDD16',
-  defaultSize: { w: 2, h: 4 },
+  defaultSize: { w: 3, h: 4 },
   minW: 2,
   minH: 2,
 
@@ -37,6 +37,8 @@ WIDGET_REGISTRY['claude-usage'] = {
         if (u.extra_usage && u.extra_usage.is_enabled && u.extra_usage.used_credits > 0) {
           html += `<div class="claude-usage-extra">Overuse: $${u.extra_usage.used_credits.toFixed(2)} / $${u.extra_usage.monthly_limit}</div>`;
         }
+      } else if (!data.rateLimited) {
+        html += '<div class="claude-usage-no-oauth">No OAuth token found — rate limit bars require signing in to <a href="https://claude.ai" target="_blank">claude.ai</a> via Claude Code (<code>/login</code>)</div>';
       }
 
       if (data.sessionStats) {

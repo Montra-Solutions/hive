@@ -3,6 +3,7 @@
 WIDGET_REGISTRY['sentry'] = {
   title: 'Sentry',
   icon: '\uD83D\uDC1B',
+  settingsKey: 'sentry',
   defaultSize: { w: 4, h: 6 },
   minW: 3,
   minH: 3,

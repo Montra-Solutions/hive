@@ -392,10 +392,24 @@ let claudeUsageBackoff = 0; // number of consecutive 429s
 
 function getClaudeOAuthToken() {
   try {
+    // 1. Try flat file (Windows / older Claude Code versions)
     const home = isWindows ? process.env.USERPROFILE : homedir();
     const credPath = join(home, '.claude', '.credentials.json');
-    if (!existsSync(credPath)) return null;
-    const creds = JSON.parse(readFileSync(credPath, 'utf8'));
+    let creds = null;
+    if (existsSync(credPath)) {
+      creds = JSON.parse(readFileSync(credPath, 'utf8'));
+    }
+    // 2. On macOS, try the system keychain (newer Claude Code stores creds here)
+    if (!creds && process.platform === 'darwin') {
+      try {
+        const raw = execSync(
+          'security find-generic-password -s "Claude Code-credentials" -w',
+          { encoding: 'utf8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] },
+        ).trim();
+        if (raw) creds = JSON.parse(raw);
+      } catch { /* not in keychain */ }
+    }
+    if (!creds) return null;
     const oauth = creds.claudeAiOauth;
     if (!oauth || !oauth.accessToken) return null;
     // Check if token is expired
@@ -3624,7 +3638,18 @@ app.post('/api/script/run', async (req, res) => {
 // API Client — collections CRUD
 // ---------------------------------------------------------------------------
 app.get('/api/collections', (_req, res) => {
-  res.json(readJsonFile('collections.json', []));
+  let collections = readJsonFile('collections.json', []);
+  // Seed with demo collection on first run
+  if (collections.length === 0) {
+    const seedPath = join(import.meta.dirname, 'data', 'seed-collection.json');
+    if (existsSync(seedPath)) {
+      try {
+        collections = JSON.parse(readFileSync(seedPath, 'utf8'));
+        writeJsonFile('collections.json', collections);
+      } catch { /* ignore seed errors */ }
+    }
+  }
+  res.json(collections);
 });
 
 app.put('/api/collections', (req, res) => {

@@ -3,6 +3,7 @@
 WIDGET_REGISTRY['github'] = {
   title: 'GitHub',
   icon: '\uD83D\uDC19',
+  settingsKey: 'github',
   defaultSize: { w: 6, h: 6 },
   minW: 3,
   minH: 3,

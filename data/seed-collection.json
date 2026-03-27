@@ -1,0 +1,264 @@
+[
+  {
+    "id": "seed_httpbin",
+    "name": "httpbin.org (Demo)",
+    "auth": { "type": "none" },
+    "variables": [
+      { "key": "baseUrl", "value": "https://httpbin.org", "enabled": true }
+    ],
+    "preScript": "",
+    "testScript": "",
+    "folders": [
+      {
+        "id": "fld_http_methods",
+        "name": "HTTP Methods",
+        "auth": { "type": "inherit" },
+        "variables": [],
+        "preScript": "",
+        "testScript": "",
+        "folders": [],
+        "requests": [
+          {
+            "id": "req_get",
+            "name": "GET request",
+            "method": "GET",
+            "url": "{{baseUrl}}/get",
+            "params": [
+              { "key": "foo", "value": "bar", "enabled": true, "description": "Sample query param" }
+            ],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_post",
+            "name": "POST request",
+            "method": "POST",
+            "url": "{{baseUrl}}/post",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{\n  \"name\": \"H.I.V.E.\",\n  \"version\": \"1.0\"\n}",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_put",
+            "name": "PUT request",
+            "method": "PUT",
+            "url": "{{baseUrl}}/put",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{\n  \"id\": 1,\n  \"name\": \"Updated\"\n}",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_delete",
+            "name": "DELETE request",
+            "method": "DELETE",
+            "url": "{{baseUrl}}/delete",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_patch",
+            "name": "PATCH request",
+            "method": "PATCH",
+            "url": "{{baseUrl}}/patch",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{\n  \"field\": \"patched\"\n}",
+            "preScript": "",
+            "testScript": ""
+          }
+        ]
+      },
+      {
+        "id": "fld_inspection",
+        "name": "Request Inspection",
+        "auth": { "type": "inherit" },
+        "variables": [],
+        "preScript": "",
+        "testScript": "",
+        "folders": [],
+        "requests": [
+          {
+            "id": "req_headers",
+            "name": "Request headers",
+            "method": "GET",
+            "url": "{{baseUrl}}/headers",
+            "params": [],
+            "headers": [
+              { "key": "X-Custom-Header", "value": "hive-dashboard", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_ip",
+            "name": "Origin IP",
+            "method": "GET",
+            "url": "{{baseUrl}}/ip",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_useragent",
+            "name": "User agent",
+            "method": "GET",
+            "url": "{{baseUrl}}/user-agent",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          }
+        ]
+      },
+      {
+        "id": "fld_responses",
+        "name": "Status Codes",
+        "auth": { "type": "inherit" },
+        "variables": [],
+        "preScript": "",
+        "testScript": "",
+        "folders": [],
+        "requests": [
+          {
+            "id": "req_200",
+            "name": "200 OK",
+            "method": "GET",
+            "url": "{{baseUrl}}/status/200",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_201",
+            "name": "201 Created",
+            "method": "GET",
+            "url": "{{baseUrl}}/status/201",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_404",
+            "name": "404 Not Found",
+            "method": "GET",
+            "url": "{{baseUrl}}/status/404",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_500",
+            "name": "500 Server Error",
+            "method": "GET",
+            "url": "{{baseUrl}}/status/500",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          }
+        ]
+      },
+      {
+        "id": "fld_dynamic",
+        "name": "Dynamic Data",
+        "auth": { "type": "inherit" },
+        "variables": [],
+        "preScript": "",
+        "testScript": "",
+        "folders": [],
+        "requests": [
+          {
+            "id": "req_delay",
+            "name": "Delayed response (2s)",
+            "method": "GET",
+            "url": "{{baseUrl}}/delay/2",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_uuid",
+            "name": "Generate UUID",
+            "method": "GET",
+            "url": "{{baseUrl}}/uuid",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_base64",
+            "name": "Decode Base64",
+            "method": "GET",
+            "url": "{{baseUrl}}/base64/SElWRSBEYXNoYm9hcmQ=",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          }
+        ]
+      }
+    ],
+    "requests": []
+  }
+]

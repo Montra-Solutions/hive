@@ -3,6 +3,7 @@
 WIDGET_REGISTRY['releases'] = {
   title: 'Releases',
   icon: '\uD83D\uDE80',
+  settingsKey: 'releases',
   defaultSize: { w: 4, h: 6 },
   minW: 2,
   minH: 2,

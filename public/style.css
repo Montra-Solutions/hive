@@ -1296,6 +1296,16 @@ body {
   font-size: 10px;
   color: var(--subtext0);
 }
+.claude-usage-no-oauth {
+  margin: 8px 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--subtext1);
+  border-left: 2px solid var(--surface1);
+  line-height: 1.4;
+}
+.claude-usage-no-oauth a { color: var(--mauve); }
+.claude-usage-no-oauth code { font-size: 10px; color: var(--text); }
 
 .claude-usage-rate-limit {
   margin: 4px 0;

@@ -3,6 +3,7 @@
 WIDGET_REGISTRY['env-diff'] = {
   title: 'Env Diff',
   icon: '\uD83D\uDD0D',
+  settingsKey: 'envDiff',
   defaultSize: { w: 6, h: 4 },
   minW: 3,
   minH: 2,

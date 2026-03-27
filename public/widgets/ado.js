@@ -3,6 +3,7 @@
 WIDGET_REGISTRY['ado'] = {
   title: 'Azure DevOps',
   icon: '\uD83D\uDCCB',
+  settingsKey: 'ado',
   defaultSize: { w: 4, h: 6 },
   minW: 3,
   minH: 3,
