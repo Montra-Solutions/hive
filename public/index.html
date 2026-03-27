@@ -19,8 +19,13 @@
   <!-- Header -->
   <header class="header">
     <div class="header-left">
-      <svg class="header-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+      <svg class="header-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <!-- Outer hexagon (flat-top, R=9) -->
+        <polygon points="19,10 14.5,17.8 5.5,17.8 1,10 5.5,2.2 14.5,2.2" stroke-width="1.5" stroke-linejoin="round"/>
+        <!-- Inner honeycomb cells (3 small hexes, flat-top, R=2.5) -->
+        <polygon fill="currentColor" stroke="none" opacity="0.35" points="10,9 8.75,11.17 6.25,11.17 5,9 6.25,6.83 8.75,6.83"/>
+        <polygon fill="currentColor" stroke="none" opacity="0.35" points="15,9 13.75,11.17 11.25,11.17 10,9 11.25,6.83 13.75,6.83"/>
+        <polygon fill="currentColor" stroke="none" opacity="0.35" points="12.5,13.5 11.25,15.67 8.75,15.67 7.5,13.5 8.75,11.33 11.25,11.33"/>
       </svg>
       <h1 id="dashboard-title">Dev Dashboard</h1>
     </div>

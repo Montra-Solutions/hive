@@ -151,13 +151,41 @@ WIDGET_REGISTRY['contributions'] = {
       `<span class="contrib-legend-dot" style="background:${SRC_COLORS[s]}"></span><span class="contrib-legend-label">${s === 'github' ? 'GitHub' : s.toUpperCase()}</span>`
     ).join('');
 
-    const monthHtml = monthMarks.map(({ weekIdx: wi, label }) =>
-      `<div class="contrib-month" style="grid-column:${wi+1}">${esc(label)}</div>`
+    // Hex grid geometry — flat-top hexagons with staggered columns
+    const HR       = 5;                    // radius (center to vertex)
+    const HH       = HR * Math.sqrt(3);    // flat-to-flat height ≈ 8.66
+    const COL_STEP = HR * 1.5;             // x spacing between column centers = 7.5
+    const STAGGER  = HH / 2;              // y shift for odd-indexed columns ≈ 4.33
+    const GX       = 14;                   // left offset (room for day labels)
+    const GY       = 16;                   // top offset (room for month labels)
+
+    function colX(col)      { return GX + HR + col * COL_STEP; }
+    function rowY(row, col) { return GY + (col % 2 === 1 ? STAGGER : 0) + row * HH; }
+    function hexPts(cx, cy) {
+      let s = '';
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i;
+        s += (cx + HR * Math.cos(a)).toFixed(1) + ',' + (cy + HR * Math.sin(a)).toFixed(1) + (i < 5 ? ' ' : '');
+      }
+      return s;
+    }
+
+    const svgW = Math.ceil(GX + HR + (totalWeeks - 1) * COL_STEP + HR + 4);
+    const svgH = Math.ceil(GY + STAGGER + 6 * HH + HH / 2 + 4);
+
+    const monthSvg = monthMarks.map(({ weekIdx: wi, label }) =>
+      `<text x="${colX(wi).toFixed(1)}" y="11" class="contrib-svg-label">${esc(label)}</text>`
     ).join('');
 
-    const cellHtml = cells.map(({ tip, level }) =>
-      `<div class="contrib-cell contrib-l${level}" title="${tip}"></div>`
+    const daySvg = ['M','','W','','F','',''].map((d, row) =>
+      d ? `<text x="${GX - 2}" y="${(rowY(row, 0) + 3).toFixed(1)}" class="contrib-svg-label" text-anchor="end">${d}</text>` : ''
     ).join('');
+
+    const hexSvg = cells.map(({ tip, level }, idx) => {
+      const col = Math.floor(idx / 7);
+      const row = idx % 7;
+      return `<polygon points="${hexPts(colX(col), rowY(row, col))}" class="hex-cell hex-l${level}"><title>${tip}</title></polygon>`;
+    }).join('');
 
     body.innerHTML = `
       <div class="contrib-stats">
@@ -170,11 +198,7 @@ WIDGET_REGISTRY['contributions'] = {
         <span class="contrib-legend">${legendHtml}</span>
       </div>
       <div class="contrib-wrap">
-        <div class="contrib-day-labels"><span>M</span><span></span><span>W</span><span></span><span>F</span><span></span><span></span></div>
-        <div class="contrib-right">
-          <div class="contrib-months" style="grid-template-columns:repeat(${totalWeeks},10px)">${monthHtml}</div>
-          <div class="contrib-grid" style="grid-template-columns:repeat(${totalWeeks},10px)">${cellHtml}</div>
-        </div>
+        <svg class="contrib-svg" width="${svgW}" height="${svgH}" xmlns="http://www.w3.org/2000/svg">${monthSvg}${daySvg}${hexSvg}</svg>
       </div>`;
   },
 

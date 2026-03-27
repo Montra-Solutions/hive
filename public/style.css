@@ -7865,53 +7865,20 @@ pre:hover .copilot-apply-btn { opacity: 1; }
 .contrib-stats strong { color: var(--text); }
 .contrib-sep { color: var(--surface2); }
 .contrib-legend { margin-left: auto; display: flex; align-items: center; gap: 5px; }
-.contrib-legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.contrib-legend-dot { width: 10px; height: 9px; clip-path: polygon(75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%, 25% 0%); flex-shrink: 0; }
 .contrib-legend-label { font-size: 10px; color: var(--subtext0); }
 .contrib-filter-sep { width: 1px; height: 14px; background: var(--surface1); margin: 0 2px; flex-shrink: 0; }
 
-.contrib-wrap {
-  display: flex;
-  gap: 6px;
-  align-items: flex-start;
-  overflow-x: auto;
-}
-.contrib-day-labels {
-  display: grid;
-  grid-template-rows: repeat(7, 10px);
-  gap: 2px;
-  padding-top: 16px; /* align with grid rows, under month labels */
-  font-size: 9px;
-  color: var(--subtext0);
-  line-height: 10px;
-  text-align: right;
-  flex-shrink: 0;
-}
-.contrib-right { display: flex; flex-direction: column; gap: 2px; }
-.contrib-months {
-  display: grid;
-  gap: 2px;
-  font-size: 9px;
-  color: var(--subtext0);
-  height: 14px;
-  align-items: end;
-}
-.contrib-month { white-space: nowrap; }
-.contrib-grid {
-  display: grid;
-  grid-template-rows: repeat(7, 10px);
-  grid-auto-flow: column;
-  gap: 2px;
-}
-.contrib-cell {
-  width: 10px; height: 10px;
-  border-radius: 2px;
-  cursor: default;
-}
-.contrib-l0 { background: var(--surface1); }
-.contrib-l1 { background: #1a4a2e; }
-.contrib-l2 { background: #2d7a47; }
-.contrib-l3 { background: #40a85f; }
-.contrib-l4 { background: var(--green); }
+.contrib-wrap { overflow-x: auto; }
+.contrib-svg { display: block; overflow: visible; }
+.contrib-svg-label { font-size: 8px; fill: var(--subtext0); font-family: inherit; }
+.hex-cell { cursor: default; transition: opacity 0.1s; }
+.hex-cell:hover { opacity: 0.75; }
+.hex-l0 { fill: var(--surface1); }
+.hex-l1 { fill: #1a4a2e; }
+.hex-l2 { fill: #2d7a47; }
+.hex-l3 { fill: #40a85f; }
+.hex-l4 { fill: var(--green); }
 
 /* =============================================================================
    Claude Skills Widget
