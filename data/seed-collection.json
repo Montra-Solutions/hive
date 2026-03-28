@@ -260,5 +260,379 @@
       }
     ],
     "requests": []
+  },
+  {
+    "id": "seed_drone",
+    "name": "Drone (Demo Simulator)",
+    "auth": { "type": "none" },
+    "variables": [
+      { "key": "droneUrl", "value": "http://localhost:4000", "enabled": true }
+    ],
+    "preScript": "",
+    "testScript": "",
+    "folders": [
+      {
+        "id": "fld_drone_scenarios",
+        "name": "Scenarios",
+        "auth": { "type": "inherit" },
+        "variables": [],
+        "preScript": "",
+        "testScript": "",
+        "folders": [],
+        "requests": [
+          {
+            "id": "req_drone_list_scenarios",
+            "name": "List scenarios",
+            "method": "GET",
+            "url": "{{droneUrl}}/api/scenarios",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_steady",
+            "name": "Run: Steady State",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/scenario/steady-state",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_incident",
+            "name": "Run: Production Incident",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/scenario/incident",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_sprint",
+            "name": "Run: Sprint Kickoff",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/scenario/sprint-start",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_release",
+            "name": "Run: Release Day",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/scenario/release-day",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_drift",
+            "name": "Run: Config Drift",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/scenario/env-drift",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_abort",
+            "name": "Abort scenario",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/scenario/abort",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          }
+        ]
+      },
+      {
+        "id": "fld_drone_actions",
+        "name": "Quick Actions",
+        "auth": { "type": "inherit" },
+        "variables": [],
+        "preScript": "",
+        "testScript": "",
+        "folders": [],
+        "requests": [
+          {
+            "id": "req_drone_commit",
+            "name": "Make commit",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/action/commit",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{}",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_dirty",
+            "name": "Dirty working tree",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/action/dirty",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{}",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_release_action",
+            "name": "Add release",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/action/release",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{\n  \"title\": \"Hotfix: demo release\",\n  \"description\": \"Triggered from HIVE Endpoints tab\"\n}",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_env",
+            "name": "Mutate env",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/action/env-mutate",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{}",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_sentry_new",
+            "name": "New Sentry issue",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/action/sentry-new",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{\n  \"title\": \"FatalError: Out of memory\",\n  \"level\": \"fatal\"\n}",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_api_down",
+            "name": "API down",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/action/service-down",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{\n  \"service\": \"api-prod\",\n  \"status\": \"down\"\n}",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_api_recover",
+            "name": "API recover",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/action/service-recover",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{\n  \"service\": \"api-prod\",\n  \"latencyMs\": 45\n}",
+            "preScript": "",
+            "testScript": ""
+          }
+        ]
+      },
+      {
+        "id": "fld_drone_state",
+        "name": "State & Control",
+        "auth": { "type": "inherit" },
+        "variables": [],
+        "preScript": "",
+        "testScript": "",
+        "folders": [],
+        "requests": [
+          {
+            "id": "req_drone_state",
+            "name": "Get state",
+            "method": "GET",
+            "url": "{{droneUrl}}/api/state",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_services",
+            "name": "Get services",
+            "method": "GET",
+            "url": "{{droneUrl}}/api/services",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_reset",
+            "name": "Reset all state",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/reset",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_tick",
+            "name": "Set tick interval",
+            "method": "POST",
+            "url": "{{droneUrl}}/api/tick-interval",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{\n  \"interval\": 5000\n}",
+            "preScript": "",
+            "testScript": ""
+          }
+        ]
+      },
+      {
+        "id": "fld_drone_mock_apis",
+        "name": "Mock APIs",
+        "auth": { "type": "inherit" },
+        "variables": [],
+        "preScript": "",
+        "testScript": "",
+        "folders": [],
+        "requests": [
+          {
+            "id": "req_drone_sentry_issues",
+            "name": "Sentry: List issues",
+            "method": "GET",
+            "url": "{{droneUrl}}/sentry/api/0/projects/demo-org/demo-api/issues/",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_ado_workitems",
+            "name": "ADO: List work items (WIQL)",
+            "method": "POST",
+            "url": "{{droneUrl}}/ado/demo-org/Demo%20Project/_apis/wit/wiql",
+            "params": [],
+            "headers": [
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "inherit" },
+            "bodyMode": "json",
+            "bodyContent": "{\n  \"query\": \"SELECT [System.Id] FROM WorkItems\"\n}",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_ado_prs",
+            "name": "ADO: List pull requests",
+            "method": "GET",
+            "url": "{{droneUrl}}/ado/demo-org/Demo%20Project/_apis/git/repositories/drone/pullrequests",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_health",
+            "name": "Health: API Prod",
+            "method": "GET",
+            "url": "{{droneUrl}}/health/api-prod",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          },
+          {
+            "id": "req_drone_statuspage",
+            "name": "Health: StatusPage aggregate",
+            "method": "GET",
+            "url": "{{droneUrl}}/health/statuspage",
+            "params": [],
+            "headers": [],
+            "auth": { "type": "inherit" },
+            "bodyMode": "none",
+            "bodyContent": "",
+            "preScript": "",
+            "testScript": ""
+          }
+        ]
+      }
+    ],
+    "requests": []
   }
 ]
