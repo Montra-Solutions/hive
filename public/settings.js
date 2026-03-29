@@ -23,6 +23,17 @@ const SETTINGS_SECTIONS = [
     ],
   },
   {
+    key: 'dataPaths',
+    title: 'Data Directories',
+    icon: '\uD83D\uDCC2',
+    description: 'Where shared and private data files are stored. Changes require a restart.',
+    fields: [
+      { key: 'dataDir', label: 'Shared Data Directory', type: 'text', placeholder: '../hivemind/data', help: 'Shared collections, environments, metrics. Relative to projects directory or absolute.' },
+      { key: 'privateDataDir', label: 'Private Data Directory', type: 'text', placeholder: '~/.config/hive/data', help: 'Personal collections, request history. Never shared.' },
+      { key: 'docsDir', label: 'Docs Directory', type: 'text', placeholder: '../montra-docs/docs', help: 'Markdown docs source. Relative to projects directory or absolute.' },
+    ],
+  },
+  {
     key: 'repos',
     title: 'Repositories',
     icon: '\uD83D\uDCC1',

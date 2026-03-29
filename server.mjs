@@ -540,6 +540,9 @@ app.get('/api/config', (_req, res) => {
     cliTools: CONFIG.cliTools || [],
     repos: REPOS,
     externalMonitors: CONFIG.externalMonitors || [],
+    dataDir: DATA_DIR,
+    privateDataDir: PRIVATE_DATA_DIR,
+    docsDir: DOCS_DIR,
   });
 });
 
@@ -634,15 +637,25 @@ app.put('/api/config/section/:section', express.json(), (req, res) => {
 // ---------------------------------------------------------------------------
 // API Client — data layer helpers
 // ---------------------------------------------------------------------------
-const DATA_DIR = join(__dirname, 'data');
-
-function ensureDataDir() {
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+function resolveDataDir(configured, fallback) {
+  if (configured) {
+    if (configured.startsWith('~')) configured = join(homedir(), configured.slice(1));
+    return isAbsolute(configured) ? configured : join(BASE_DIR, configured);
+  }
+  return fallback;
 }
 
-function readJsonFile(filename, defaultValue) {
-  ensureDataDir();
-  const filepath = join(DATA_DIR, filename);
+const DATA_DIR = resolveDataDir(CONFIG.dataDir, join(__dirname, 'data'));
+const PRIVATE_DATA_DIR = resolveDataDir(CONFIG.privateDataDir, join(homedir(), '.config', 'hive', 'data'));
+const SEED_DIR = join(__dirname, 'data'); // seed files always from hive install
+
+function ensureDir(dir) {
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+}
+
+function readJsonFile(filename, defaultValue, dir = DATA_DIR) {
+  ensureDir(dir);
+  const filepath = join(dir, filename);
   if (!existsSync(filepath)) {
     writeFileSync(filepath, JSON.stringify(defaultValue, null, 2), 'utf-8');
     return defaultValue;
@@ -654,9 +667,9 @@ function readJsonFile(filename, defaultValue) {
   }
 }
 
-function writeJsonFile(filename, data) {
-  ensureDataDir();
-  writeFileSync(join(DATA_DIR, filename), JSON.stringify(data, null, 2), 'utf-8');
+function writeJsonFile(filename, data, dir = DATA_DIR) {
+  ensureDir(dir);
+  writeFileSync(join(dir, filename), JSON.stringify(data, null, 2), 'utf-8');
 }
 
 const DEFAULT_ENVIRONMENTS = [];
@@ -3640,22 +3653,34 @@ app.post('/api/script/run', async (req, res) => {
 // API Client — collections CRUD
 // ---------------------------------------------------------------------------
 app.get('/api/collections', (_req, res) => {
-  let collections = readJsonFile('collections.json', []);
-  // Seed with demo collection on first run
-  if (collections.length === 0) {
-    const seedPath = join(import.meta.dirname, 'data', 'seed-collection.json');
+  let shared = readJsonFile('collections.json', [], DATA_DIR);
+  let private_ = readJsonFile('collections.json', [], PRIVATE_DATA_DIR);
+
+  // Seed with demo collection on first run (write to shared)
+  if (shared.length === 0 && private_.length === 0) {
+    const seedPath = join(SEED_DIR, 'seed-collection.json');
     if (existsSync(seedPath)) {
       try {
-        collections = JSON.parse(readFileSync(seedPath, 'utf8'));
-        writeJsonFile('collections.json', collections);
+        shared = JSON.parse(readFileSync(seedPath, 'utf8'));
+        writeJsonFile('collections.json', shared, DATA_DIR);
       } catch { /* ignore seed errors */ }
     }
   }
-  res.json(collections);
+
+  // Merge: private overrides shared when ids collide
+  const privateIds = new Set(private_.map(c => c.id));
+  const merged = [
+    ...shared.filter(c => !privateIds.has(c.id)).map(c => ({ ...c, _source: 'shared' })),
+    ...private_.map(c => ({ ...c, _source: 'private' })),
+  ];
+  res.json(merged);
 });
 
 app.put('/api/collections', (req, res) => {
-  writeJsonFile('collections.json', req.body);
+  const target = req.query.target === 'shared' ? DATA_DIR : PRIVATE_DATA_DIR;
+  // Strip _source markers before saving
+  const cleaned = (Array.isArray(req.body) ? req.body : []).map(({ _source, ...rest }) => rest);
+  writeJsonFile('collections.json', cleaned, target);
   res.json({ ok: true });
 });
 
@@ -3721,10 +3746,11 @@ app.post('/api/collections/import', (req, res) => {
     }
   }
 
-  // Append to existing collections
-  const collections = readJsonFile('collections.json', []);
+  // Append to existing collections (imports go to private by default)
+  const target = req.query.target === 'shared' ? DATA_DIR : PRIVATE_DATA_DIR;
+  const collections = readJsonFile('collections.json', [], target);
   collections.push(collection);
-  writeJsonFile('collections.json', collections);
+  writeJsonFile('collections.json', collections, target);
   res.json(collection);
 });
 
@@ -3906,9 +3932,10 @@ app.post('/api/collections/import-postman', (req, res) => {
     requests: converted.requests,
   };
 
-  const collections = readJsonFile('collections.json', []);
+  const target = req.query.target === 'shared' ? DATA_DIR : PRIVATE_DATA_DIR;
+  const collections = readJsonFile('collections.json', [], target);
   collections.push(collection);
-  writeJsonFile('collections.json', collections);
+  writeJsonFile('collections.json', collections, target);
 
   const totalRequests = collection.requests.length + collection.folders.reduce((sum, f) => sum + (f.requests?.length || 0), 0);
   res.json({ ...collection, _totalRequests: totalRequests });
@@ -3980,14 +4007,14 @@ app.put('/api/environments', (req, res) => {
 // API Client — history CRUD
 // ---------------------------------------------------------------------------
 app.get('/api/history', (_req, res) => {
-  res.json(readJsonFile('history.json', []));
+  res.json(readJsonFile('history.json', [], PRIVATE_DATA_DIR));
 });
 
 app.post('/api/history', (req, res) => {
-  const history = readJsonFile('history.json', []);
+  const history = readJsonFile('history.json', [], PRIVATE_DATA_DIR);
   history.unshift({ ...req.body, timestamp: Date.now() });
   if (history.length > 200) history.length = 200;
-  writeJsonFile('history.json', history);
+  writeJsonFile('history.json', history, PRIVATE_DATA_DIR);
   res.json({ ok: true });
 });
 
@@ -4917,6 +4944,9 @@ httpServer.listen(PORT, () => {
   console.log(`\n  ${CONFIG.title || 'Dev Dashboard'}`);
   console.log(`  http://localhost:${PORT}\n`);
   console.log(`  Base dir: ${BASE_DIR}`);
+  console.log(`  Data dir: ${DATA_DIR}`);
+  console.log(`  Private dir: ${PRIVATE_DATA_DIR}`);
+  console.log(`  Docs dir: ${DOCS_DIR}`);
   console.log(`  Platform: ${process.platform}`);
   console.log(`  Log dir: ${LOG_DIR}`);
   console.log(`  Logs: ${Object.keys(LOG_DEFS).join(', ')}\n`);
