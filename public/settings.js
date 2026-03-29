@@ -123,7 +123,7 @@ const SETTINGS_SECTIONS = [
       { envKey: 'GITHUB_TOKEN', label: 'GitHub Token (GITHUB_TOKEN)', testEndpoint: '/api/github/test' },
     ],
     fields: [
-      { key: 'github.org', label: 'Organization', type: 'text', placeholder: 'my-github-org' },
+      { key: 'github.org', label: 'Organization(s)', type: 'text', placeholder: 'my-org, another-org', help: 'Comma-separated list of GitHub organizations' },
     ],
     extraLists: [
       { key: 'github.users',      label: 'Users (filter PRs by)',  adoSource: '/api/github/org-members', placeholder: 'github-username' },
