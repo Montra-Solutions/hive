@@ -528,37 +528,36 @@ const DEFAULT_LAYOUT = [
 // Dashboard Templates
 // ---------------------------------------------------------------------------
 const DASHBOARD_TEMPLATES = {
-  'Full Stack': [
-    { id: 'git-status',        x: 0,  y: 0,  w: 6, h: 4 },
-    { id: 'external-services', x: 6,  y: 0,  w: 4, h: 4 },
-    { id: 'claude-usage',      x: 10, y: 0,  w: 2, h: 4 },
-    { id: 'ado',               x: 0,  y: 4,  w: 4, h: 6 },
-    { id: 'sentry',            x: 4,  y: 4,  w: 4, h: 6 },
-    { id: 'releases',          x: 8,  y: 4,  w: 4, h: 6 },
-    { id: 'db-migrations',     x: 0,  y: 10, w: 4, h: 5 },
-    { id: 'env-diff',          x: 4,  y: 10, w: 4, h: 4 },
-    { id: 'cli-tools',         x: 8,  y: 10, w: 4, h: 5 },
-    { id: 'github',            x: 0,  y: 15, w: 6, h: 6 },
-    { id: 'commit-history',    x: 6,  y: 15, w: 6, h: 7 },
-    { id: 'contributions',     x: 0,  y: 21, w: 8, h: 4 },
+  // ── Status ─────────────────────────────────────────────────────────────────
+  // "Is everything healthy?" — services, pipelines, repos, errors, activity
+  'Status': [
+    { id: 'external-services', x: 0,  y: 0,  w: 8,  h: 4 },
+    { id: 'pipelines',         x: 8,  y: 0,  w: 4,  h: 4 },
+    { id: 'git-status',        x: 0,  y: 4,  w: 5,  h: 5 },
+    { id: 'sentry',            x: 5,  y: 4,  w: 7,  h: 5 },
+    { id: 'activity-feed',     x: 0,  y: 9,  w: 12, h: 6 },
   ],
-  'Git & Code': [
-    { id: 'git-status',     x: 0, y: 0, w: 8, h: 5 },
-    { id: 'commit-history', x: 8, y: 0, w: 4, h: 6 },
-    { id: 'contributions',  x: 0, y: 5, w: 8, h: 4 },
-    { id: 'github',         x: 0, y: 9, w: 6, h: 6 },
+
+  // ── Workflow ────────────────────────────────────────────────────────────────
+  // "What am I working on today?" — sprint, PRs, activity, contributions
+  'Workflow': [
+    { id: 'ado',           x: 0,  y: 0,  w: 4,  h: 10 },
+    { id: 'github',        x: 4,  y: 0,  w: 8,  h: 5  },
+    { id: 'activity-feed', x: 4,  y: 5,  w: 8,  h: 5  },
+    { id: 'contributions', x: 0,  y: 10, w: 8,  h: 4  },
+    { id: 'releases',      x: 8,  y: 10, w: 4,  h: 4  },
   ],
-  'Project Management': [
-    { id: 'ado',           x: 0, y: 0, w: 5, h: 7 },
-    { id: 'sentry',        x: 5, y: 0, w: 4, h: 7 },
-    { id: 'releases',      x: 9, y: 0, w: 3, h: 7 },
-    { id: 'db-migrations', x: 0, y: 7, w: 4, h: 5 },
-    { id: 'env-diff',      x: 4, y: 7, w: 4, h: 4 },
-  ],
-  'Minimal': [
-    { id: 'git-status',        x: 0, y: 0, w: 7, h: 4 },
-    { id: 'external-services', x: 7, y: 0, w: 5, h: 4 },
-    { id: 'ado',               x: 0, y: 4, w: 5, h: 6 },
+
+  // ── Dev Tasks ───────────────────────────────────────────────────────────────
+  // "Heads-down coding" — repos, commits, DB, env, errors, CLI
+  'Dev Tasks': [
+    { id: 'git-status',     x: 0,  y: 0,  w: 7,  h: 5 },
+    { id: 'commit-history', x: 7,  y: 0,  w: 5,  h: 5 },
+    { id: 'db-migrations',  x: 0,  y: 5,  w: 4,  h: 5 },
+    { id: 'env-diff',       x: 4,  y: 5,  w: 4,  h: 5 },
+    { id: 'sentry',         x: 8,  y: 5,  w: 4,  h: 5 },
+    { id: 'contributions',  x: 0,  y: 10, w: 8,  h: 4 },
+    { id: 'cli-tools',      x: 8,  y: 10, w: 4,  h: 4 },
   ],
 };
 
