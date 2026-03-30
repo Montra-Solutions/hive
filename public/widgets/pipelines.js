@@ -29,7 +29,7 @@ WIDGET_REGISTRY['pipelines'] = {
 
   _render(list, pipelines) {
     if (!pipelines.length) {
-      list.innerHTML = '<span class="panel-loading">No pipelines configured</span>';
+      list.innerHTML = '<span class="panel-loading">No pipelines — configure ADO in Settings</span>';
       return;
     }
 

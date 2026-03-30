@@ -2107,7 +2107,7 @@ app.get('/api/ado/prs', async (_req, res) => {
 // ---------------------------------------------------------------------------
 
 app.get('/api/ado/pipelines', async (_req, res) => {
-  if (!isAdoConfigured()) return res.status(404).json({ error: 'ADO not configured' });
+  if (!isAdoConfigured()) return res.json([]);
   try {
     const listUrl = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_apis/pipelines?api-version=7.1`;
     const data = await adoFetch(listUrl);
