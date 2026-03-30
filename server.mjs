@@ -1835,12 +1835,13 @@ function adoHeaders() {
   };
 }
 
-async function adoFetch(url) {
+async function adoFetch(url, opts = {}) {
   const pat = getAdoPat();
   if (!pat) throw new Error('ADO_PAT not configured');
 
   const res = await fetch(url, {
-    headers: adoHeaders(),
+    ...opts,
+    headers: { ...adoHeaders(), ...(opts.headers || {}) },
     signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`ADO API ${res.status}: ${res.statusText}`);
@@ -2096,6 +2097,66 @@ app.get('/api/ado/prs', async (_req, res) => {
     }
 
     res.json(allPrs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Pipeline / Build Status
+// ---------------------------------------------------------------------------
+
+app.get('/api/ado/pipelines', async (_req, res) => {
+  if (!isAdoConfigured()) return res.status(404).json({ error: 'ADO not configured' });
+  try {
+    const listUrl = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_apis/pipelines?api-version=7.1`;
+    const data = await adoFetch(listUrl);
+    const pipelines = data.value || [];
+
+    const results = await Promise.all(pipelines.map(async (p) => {
+      try {
+        const runsUrl = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_apis/pipelines/${p.id}/runs?$top=1&api-version=7.1`;
+        const runsData = await adoFetch(runsUrl);
+        const r = (runsData.value || [])[0] || null;
+        return {
+          id: p.id, name: p.name, folder: p.folder,
+          latestRun: r ? {
+            id: r.id,
+            runNumber: r.name,
+            status: r.status || (r.state === 'completed' ? (r.result || 'succeeded') : r.state),
+            startTime: r.startTime,
+            finishTime: r.finishTime,
+            triggeredBy: r.triggeredBy?.displayName || '',
+            approval: r.approval || null,
+          } : null,
+        };
+      } catch {
+        return { id: p.id, name: p.name, folder: p.folder, latestRun: null };
+      }
+    }));
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ado/pipelines/:id/runs', async (req, res) => {
+  if (!isAdoConfigured()) return res.status(404).json({ error: 'ADO not configured' });
+  try {
+    const url = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_apis/pipelines/${req.params.id}/runs?api-version=7.1`;
+    const data = await adoFetch(url, { method: 'POST', body: JSON.stringify(req.body || {}), headers: { 'Content-Type': 'application/json' } });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ado/pipelines/:id/runs/:runId/approve', async (req, res) => {
+  if (!isAdoConfigured()) return res.status(404).json({ error: 'ADO not configured' });
+  try {
+    const url = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_apis/pipelines/${req.params.id}/runs/${req.params.runId}/approve?api-version=7.1`;
+    const data = await adoFetch(url, { method: 'POST', body: JSON.stringify(req.body || {}), headers: { 'Content-Type': 'application/json' } });
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

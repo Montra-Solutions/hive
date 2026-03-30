@@ -1444,6 +1444,34 @@ body {
   font-style: italic;
 }
 
+/* ── Pipelines widget ─────────────────────────────────────────────────────── */
+.pipeline-list { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
+.pipeline-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.pipeline-row:hover { background: var(--surface1); }
+.pipeline-name { font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pipeline-meta { color: var(--subtext0); white-space: nowrap; }
+.pipeline-duration { color: var(--overlay1); white-space: nowrap; min-width: 40px; text-align: right; }
+.pipeline-actions { display: flex; gap: 4px; align-items: center; }
+.pipeline-status { font-size: 11px; padding: 2px 7px; border-radius: 10px; white-space: nowrap; font-weight: 500; }
+.ps-succeeded { background: rgba(166,227,161,0.15); color: var(--green); }
+.ps-failed    { background: rgba(243,139,168,0.15); color: var(--red); }
+.ps-running   { background: rgba(137,180,250,0.15); color: var(--blue); animation: pipeline-pulse 1.4s ease-in-out infinite; }
+.ps-waiting   { background: rgba(249,226,175,0.15); color: var(--yellow); }
+.ps-queued    { background: rgba(166,173,200,0.15); color: var(--overlay1); }
+.ps-unknown   { background: var(--surface1); color: var(--overlay0); }
+@keyframes pipeline-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+.pipeline-approve-btn { background: rgba(249,226,175,0.2); border-color: var(--yellow); color: var(--yellow); font-size: 11px; padding: 2px 8px; }
+.pipeline-approve-btn:hover { background: rgba(249,226,175,0.35); }
+.pipeline-run-btn { font-size: 11px; padding: 2px 8px; }
+
 @keyframes dash-spin { to { transform: rotate(360deg); } }
 
 .loading-spinner {
