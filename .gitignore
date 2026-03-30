@@ -4,6 +4,7 @@ data/databases.json
 data/environments.json
 data/collections.json
 data/metrics.json
+data/layouts.json
 data/db-scripts/
 run-web.sh
 run-api.sh

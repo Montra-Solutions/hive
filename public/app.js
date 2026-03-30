@@ -569,12 +569,18 @@ const activeWidgets = {};  // widgetId → { widget, element }
 // ---------------------------------------------------------------------------
 // Named Layout Manager
 // ---------------------------------------------------------------------------
-const LAYOUT_STORAGE_KEY = 'dashboard-layouts';       // { name: { grid, tabs } }
-const ACTIVE_LAYOUT_KEY = 'dashboard-active-layout';  // name string
+// Layouts are persisted server-side in data/layouts.json via /api/layouts.
+// A local cache (localStorage) provides instant reads; writes are debounced
+// and flushed to the server so layouts survive browser data clears.
+// ---------------------------------------------------------------------------
+const LAYOUT_STORAGE_KEY = 'dashboard-layouts';       // localStorage cache
+const ACTIVE_LAYOUT_KEY = 'dashboard-active-layout';  // localStorage cache
 const DEFAULT_LAYOUT_NAME = 'Default';
 
 let currentLayoutName = DEFAULT_LAYOUT_NAME;
 let suppressSave = false;  // true during bulk operations (init, layout switch)
+let _layoutSaveTimer = null;
+const LAYOUT_SAVE_DEBOUNCE_MS = 1000;
 
 function getAllLayouts() {
   try {
@@ -586,6 +592,7 @@ function getAllLayouts() {
 
 function putAllLayouts(layouts) {
   localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layouts));
+  _scheduleServerSync();
 }
 
 function getActiveLayoutName() {
@@ -595,6 +602,48 @@ function getActiveLayoutName() {
 function setActiveLayoutName(name) {
   currentLayoutName = name;
   localStorage.setItem(ACTIVE_LAYOUT_KEY, name);
+  _scheduleServerSync();
+}
+
+// Debounced sync to server — batches rapid grid-change events
+function _scheduleServerSync() {
+  if (_layoutSaveTimer) clearTimeout(_layoutSaveTimer);
+  _layoutSaveTimer = setTimeout(_flushLayoutsToServer, LAYOUT_SAVE_DEBOUNCE_MS);
+}
+
+function _flushLayoutsToServer() {
+  _layoutSaveTimer = null;
+  const layouts = getAllLayouts();
+  const active = getActiveLayoutName();
+  const tabOrder = _getLayoutTabOrderRaw();
+  fetch('/api/layouts', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layouts, active, tabOrder }),
+  }).catch(() => { /* offline — localStorage still has the data */ });
+}
+
+// Load layouts from server into localStorage (called once at init).
+// If server has data, it wins. If server is empty but localStorage has
+// layouts, push them to the server (one-time migration).
+async function _loadLayoutsFromServer() {
+  try {
+    const res = await fetch('/api/layouts');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.layouts && Object.keys(data.layouts).length > 0) {
+      // Server has data — use it
+      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(data.layouts));
+      if (data.active) localStorage.setItem(ACTIVE_LAYOUT_KEY, data.active);
+      if (data.tabOrder) localStorage.setItem(LAYOUT_TAB_ORDER_KEY, JSON.stringify(data.tabOrder));
+    } else {
+      // Server empty — migrate localStorage to server if present
+      const local = getAllLayouts();
+      if (Object.keys(local).length > 0) {
+        _flushLayoutsToServer();
+      }
+    }
+  } catch { /* server unreachable — use localStorage cache */ }
 }
 
 function initGridStack() {
@@ -1310,8 +1359,15 @@ function getLayoutTabOrder(names) {
   return names;
 }
 
+function _getLayoutTabOrderRaw() {
+  try {
+    return JSON.parse(localStorage.getItem(LAYOUT_TAB_ORDER_KEY)) || [];
+  } catch { return []; }
+}
+
 function saveLayoutTabOrder(names) {
   localStorage.setItem(LAYOUT_TAB_ORDER_KEY, JSON.stringify(names));
+  _scheduleServerSync();
 }
 
 function saveTabOrder() {
@@ -1935,6 +1991,9 @@ function getFullDefault() {
 
 (async function init() {
   await loadUserPrefs();
+
+  // Load layouts from server into localStorage cache (server is source of truth)
+  await _loadLayoutsFromServer();
 
   // Migrate old single-layout localStorage keys to named layout system
   const legacyGrid = localStorage.getItem('dashboard-layout');

@@ -5,6 +5,18 @@
 
 ---
 
+## TL;DR — Install Order
+
+| Step | Repo | What it does |
+|------|------|---|
+| 1 | **H.I.V.E.** (this repo) | Clone → `./setup.sh` → configures your identity, provider, dashboard, and writes shared config |
+| 2 | **Drone** (optional) | Clone → demo project for exploring H.I.V.E. features |
+| 3 | **[Hivemind](https://github.com/Montra-Solutions/hivemind)** | Fork → `./setup.sh` → detects existing config, installs Claude Code skills, creates platform CLAUDE.md |
+
+Each repo works independently. All three together is the full experience.
+
+---
+
 ## What is H.I.V.E.?
 
 H.I.V.E. is a single-page dashboard you run locally alongside your dev environment. It's not a SaaS product, not a hosted service, and not a browser extension. It's a Node.js server you own completely — your config, your queries, your data, all staying on your machine.
@@ -103,15 +115,16 @@ You'll be asked for:
 
 | Section | What it configures |
 |---|---|
-| **Project** | Dashboard title, your projects directory |
+| **Identity** | Your name and email (pre-filled from git config) |
+| **Provider** | ADO (Azure DevOps), GitHub, or skip |
+| **ADO / GitHub** | Org, project, team, users, PR repos, reviewers |
+| **Project** | Dashboard title, project name |
+| **Projects directory** | Parent folder containing all your repos |
 | **Repositories** | Which repos to monitor in the git status panel |
 | **Services** | Your Web and API dev servers (ports, start commands) |
-| **Log Directory** | Where your dev server logs are written |
 | **Database Connections** | PostgreSQL connection strings for the DB explorer and SQL widgets |
-| **External Monitors** | URLs to health-check (production, staging, etc.) |
-| **ADO** | Azure DevOps org, project, and PAT (if applicable) |
-| **GitHub** | GitHub org and token (if applicable) |
-| **Sentry** | Sentry org slug and auth token (if applicable) |
+
+Setup also writes a **shared config** at `~/.config/hivemind/config.md` that Hivemind skills consume — so you only configure identity and provider once.
 
 Everything setup generates is **gitignored** — credentials and local paths never leave your machine.
 
@@ -136,10 +149,13 @@ Open **http://localhost:3333** in your browser.
 | `data/environments.json` | Environment variable sets for API collections | No |
 | `data/collections.json` | Saved API request collections | No |
 | `data/metrics.json` | Saved SQL metric widget definitions | No |
+| `data/layouts.json` | Dashboard grid layouts (widget positions, named layouts) | No |
 | `run-web.sh` / `run-web.ps1` | Script to launch your web dev server | No |
 | `run-api.sh` / `run-api.ps1` | Script to launch your API dev server | No |
+| `~/.config/hivemind/config.md` | Shared config for Hivemind skills (identity, provider) | No |
+| `~/.config/hivemind/paths.env` | Directory paths for skill runtime | No |
 
-All of the above are gitignored. The repo you cloned stays clean.
+All of the above are gitignored or outside the repo. The repo you cloned stays clean.
 
 ---
 
@@ -259,6 +275,8 @@ Make sure the relevant env var is set (`ADO_PAT`, `GITHUB_TOKEN`, `SENTRY_AUTH_T
 ## Better Together: Hivemind
 
 H.I.V.E. pairs with **[Hivemind](https://github.com/Montra-Solutions/hivemind)** — a shared Claude Code configuration system that brings team-wide AI skills for PR creation, bug tracking, planning, and more.
+
+H.I.V.E. setup writes the shared config that Hivemind skills consume — so install H.I.V.E. first, then Hivemind. When Hivemind runs its setup, it detects the existing config and skips identity/provider questions.
 
 With Hivemind installed, you get the `/dashboard` skill which launches H.I.V.E. directly from Claude Code and manages service startup automatically.
 

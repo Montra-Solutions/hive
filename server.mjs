@@ -5072,6 +5072,27 @@ app.post('/api/metrics/:id/query', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Layouts — server-persisted dashboard layouts (survives browser data clears)
+// ---------------------------------------------------------------------------
+const LAYOUTS_FILE = 'layouts.json';
+
+// GET /api/layouts — return all named layouts + active layout name
+app.get('/api/layouts', (_req, res) => {
+  const data = readJsonFile(LAYOUTS_FILE, { layouts: {}, active: 'Default', tabOrder: [] });
+  res.json(data);
+});
+
+// PUT /api/layouts — overwrite all layout data
+app.put('/api/layouts', express.json({ limit: '2mb' }), (req, res) => {
+  const { layouts, active, tabOrder } = req.body;
+  if (!layouts || typeof layouts !== 'object') {
+    return res.status(400).json({ error: 'layouts object required' });
+  }
+  writeJsonFile(LAYOUTS_FILE, { layouts, active: active || 'Default', tabOrder: tabOrder || [] });
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // Socket.IO connection handler
 // ---------------------------------------------------------------------------
 io.on('connection', (socket) => {

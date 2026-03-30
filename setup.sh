@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # H.I.V.E. Setup — Hub for Integrated Visualization & Exploration
-# Interactive CLI to generate dashboard.config.json and data files.
+# Interactive CLI to generate dashboard.config.json, shared config, and data files.
 # Re-run at any time to update your configuration.
 # =============================================================================
 
@@ -10,8 +10,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/dashboard.config.json"
 DATABASES_FILE="$SCRIPT_DIR/data/databases.json"
-HIVEMIND_PATHS_DIR="$HOME/.config/hivemind"
-HIVEMIND_PATHS_FILE="$HIVEMIND_PATHS_DIR/paths.env"
+SHARED_CONFIG_DIR="$HOME/.config/hivemind"
+SHARED_CONFIG_FILE="$SHARED_CONFIG_DIR/config.md"
+PATHS_ENV_FILE="$SHARED_CONFIG_DIR/paths.env"
 
 # ---------------------------------------------------------------------------
 # Colors
@@ -83,9 +84,216 @@ if [[ -f "$CONFIG_FILE" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# [1/8] Project Info
+# [1/10] Identity
 # ---------------------------------------------------------------------------
-header "[1/8] Project Info"
+header "[1/10] Identity"
+info "Used by Hivemind skills (/create-pr, /create-bug) and shared across tools."
+
+GIT_NAME="$(git config --global user.name 2>/dev/null || echo '')"
+GIT_EMAIL="$(git config --global user.email 2>/dev/null || echo '')"
+
+ask "Your name" "$GIT_NAME"
+NAME="${REPLY:-$GIT_NAME}"
+
+ask "Your email" "$GIT_EMAIL"
+EMAIL="${REPLY:-$GIT_EMAIL}"
+
+# ---------------------------------------------------------------------------
+# [2/10] Provider
+# ---------------------------------------------------------------------------
+header "[2/10] Provider"
+info "Choose your issue tracker / source control provider."
+info "Options: ado (Azure DevOps), github, skip"
+
+ask "Provider" "ado"
+PROVIDER="${REPLY:-ado}"
+
+# ---------------------------------------------------------------------------
+# [3/10] ADO Configuration
+# ---------------------------------------------------------------------------
+ADO_ORG=""
+ADO_PROJECT=""
+ADO_TEAM=""
+ADO_USERS_JSON="[]"
+ADO_PR_REPOS_JSON="[]"
+REVIEWERS=()
+REPOS_LIST=()
+
+if [[ "$PROVIDER" == "ado" ]]; then
+  header "[3/10] Azure DevOps Configuration"
+
+  ask "ADO org name (e.g. mycompany)" ""
+  ADO_ORG="$REPLY"
+
+  ask "ADO project name (e.g. My Project)" ""
+  ADO_PROJECT="$REPLY"
+
+  ask "ADO team name (e.g. My Team)" ""
+  ADO_TEAM="$REPLY"
+
+  echo ""
+  info "ADO usernames to track in dashboards. Enter one per line, blank to finish:"
+  ADO_USERS=()
+  while true; do
+    ask "  ADO user display name (or blank to finish)" ""
+    [[ -z "$REPLY" ]] && break
+    ADO_USERS+=("$REPLY")
+    success "Added user: $REPLY"
+  done
+  if [[ ${#ADO_USERS[@]} -gt 0 ]]; then
+    ADO_USERS_JSON="["
+    for i in "${!ADO_USERS[@]}"; do
+      ADO_USERS_JSON+="$(json_str "${ADO_USERS[$i]}")"
+      [[ $i -lt $((${#ADO_USERS[@]} - 1)) ]] && ADO_USERS_JSON+=","
+    done
+    ADO_USERS_JSON+="]"
+  fi
+
+  echo ""
+  info "ADO repos for PR tracking in the dashboard. Enter repo names, blank to finish:"
+  ADO_PR_REPOS=()
+  while true; do
+    ask "  ADO repo name (or blank to finish)" ""
+    [[ -z "$REPLY" ]] && break
+    ADO_PR_REPOS+=("$REPLY")
+    success "Added PR repo: $REPLY"
+  done
+  if [[ ${#ADO_PR_REPOS[@]} -gt 0 ]]; then
+    ADO_PR_REPOS_JSON="["
+    for i in "${!ADO_PR_REPOS[@]}"; do
+      ADO_PR_REPOS_JSON+="$(json_str "${ADO_PR_REPOS[$i]}")"
+      [[ $i -lt $((${#ADO_PR_REPOS[@]} - 1)) ]] && ADO_PR_REPOS_JSON+=","
+    done
+    ADO_PR_REPOS_JSON+="]"
+  fi
+
+  echo ""
+  info "Default PR reviewers (name or email) for Hivemind /create-pr skill."
+  info "Enter one per line, blank to finish:"
+  while true; do
+    ask "  Reviewer name or email (or blank to finish)" ""
+    [[ -z "$REPLY" ]] && break
+    REVIEWERS+=("$REPLY")
+    success "Added reviewer: $REPLY"
+  done
+
+  echo ""
+  info "Repositories for Hivemind skills (used by /create-pr for branch reset)."
+  info "Enter repo names, blank to finish:"
+  while true; do
+    ask "  Repo name (or blank to finish)" ""
+    [[ -z "$REPLY" ]] && break
+    REPOS_LIST+=("$REPLY")
+    success "Added repo: $REPLY"
+  done
+else
+  header "[3/10] Azure DevOps Configuration"
+  info "Skipped (provider is not ado)."
+fi
+
+# ---------------------------------------------------------------------------
+# [4/10] GitHub Configuration
+# ---------------------------------------------------------------------------
+GITHUB_ORG=""
+GITHUB_USER=""
+GITHUB_USERS_JSON="[]"
+GITHUB_PR_REPOS_JSON="[]"
+GITHUB_WATCH_REPOS_JSON="[]"
+DEFAULT_REVIEWERS=()
+
+if [[ "$PROVIDER" == "github" ]]; then
+  header "[4/10] GitHub Configuration"
+
+  ask "GitHub org (e.g. mycompany)" ""
+  GITHUB_ORG="$REPLY"
+
+  ask "GitHub username" ""
+  GITHUB_USER="$REPLY"
+
+  echo ""
+  info "GitHub usernames to track in dashboards. Enter one per line, blank to finish:"
+  GITHUB_USERS=()
+  while true; do
+    ask "  GitHub username (or blank to finish)" ""
+    [[ -z "$REPLY" ]] && break
+    GITHUB_USERS+=("$REPLY")
+    success "Added user: $REPLY"
+  done
+  if [[ ${#GITHUB_USERS[@]} -gt 0 ]]; then
+    GITHUB_USERS_JSON="["
+    for i in "${!GITHUB_USERS[@]}"; do
+      GITHUB_USERS_JSON+="$(json_str "${GITHUB_USERS[$i]}")"
+      [[ $i -lt $((${#GITHUB_USERS[@]} - 1)) ]] && GITHUB_USERS_JSON+=","
+    done
+    GITHUB_USERS_JSON+="]"
+  fi
+
+  echo ""
+  info "GitHub repos for PR tracking. Format: owner/repo. Blank to finish:"
+  GITHUB_PR_REPOS=()
+  while true; do
+    ask "  PR repo (owner/repo, or blank to finish)" ""
+    [[ -z "$REPLY" ]] && break
+    GITHUB_PR_REPOS+=("$REPLY")
+    success "Added PR repo: $REPLY"
+  done
+  if [[ ${#GITHUB_PR_REPOS[@]} -gt 0 ]]; then
+    GITHUB_PR_REPOS_JSON="["
+    for i in "${!GITHUB_PR_REPOS[@]}"; do
+      GITHUB_PR_REPOS_JSON+="$(json_str "${GITHUB_PR_REPOS[$i]}")"
+      [[ $i -lt $((${#GITHUB_PR_REPOS[@]} - 1)) ]] && GITHUB_PR_REPOS_JSON+=","
+    done
+    GITHUB_PR_REPOS_JSON+="]"
+  fi
+
+  echo ""
+  info "GitHub repos to watch (activity feed). Format: owner/repo. Blank to finish:"
+  GITHUB_WATCH_REPOS=()
+  while true; do
+    ask "  Watch repo (owner/repo, or blank to finish)" ""
+    [[ -z "$REPLY" ]] && break
+    GITHUB_WATCH_REPOS+=("$REPLY")
+    success "Added watch repo: $REPLY"
+  done
+  if [[ ${#GITHUB_WATCH_REPOS[@]} -gt 0 ]]; then
+    GITHUB_WATCH_REPOS_JSON="["
+    for i in "${!GITHUB_WATCH_REPOS[@]}"; do
+      GITHUB_WATCH_REPOS_JSON+="$(json_str "${GITHUB_WATCH_REPOS[$i]}")"
+      [[ $i -lt $((${#GITHUB_WATCH_REPOS[@]} - 1)) ]] && GITHUB_WATCH_REPOS_JSON+=","
+    done
+    GITHUB_WATCH_REPOS_JSON+="]"
+  fi
+
+  echo ""
+  info "Default PR reviewers for Hivemind /create-pr skill."
+  info "Enter GitHub usernames, blank to finish:"
+  while true; do
+    ask "  Reviewer username (or blank to finish)" ""
+    [[ -z "$REPLY" ]] && break
+    DEFAULT_REVIEWERS+=("$REPLY")
+    success "Added reviewer: $REPLY"
+  done
+
+  echo ""
+  info "Repositories for Hivemind skills (used by /create-pr for branch reset)."
+  info "Enter repo names, blank to finish:"
+  while true; do
+    ask "  Repo name (or blank to finish)" ""
+    [[ -z "$REPLY" ]] && break
+    REPOS_LIST+=("$REPLY")
+    success "Added repo: $REPLY"
+  done
+else
+  if [[ "$PROVIDER" != "ado" ]]; then
+    header "[4/10] GitHub Configuration"
+    info "Skipped (provider is not github)."
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# [5/10] Project Info
+# ---------------------------------------------------------------------------
+header "[5/10] Project Info"
 
 ask "Project name (short identifier, e.g. myapp)" "myapp"
 PROJECT_NAME="$REPLY"
@@ -94,9 +302,9 @@ ask "Dashboard title (shown in browser tab)" "H.I.V.E."
 DASHBOARD_TITLE="$REPLY"
 
 # ---------------------------------------------------------------------------
-# [2/8] Projects Base Directory
+# [6/10] Projects Base Directory
 # ---------------------------------------------------------------------------
-header "[2/8] Projects Base Directory"
+header "[6/10] Projects Base Directory"
 info "This is the parent folder where all your repos are cloned."
 info "Example: /Users/you/Projects or /c/Users/you/Projects"
 
@@ -109,9 +317,9 @@ done
 PROJECTS_DIR="$REPLY"
 
 # ---------------------------------------------------------------------------
-# [3/8] Repos to Watch
+# [7/10] Repos to Watch
 # ---------------------------------------------------------------------------
-header "[3/8] Repos to Watch"
+header "[7/10] Repos to Watch"
 info "Enter repo directory names (relative to your projects base directory)."
 info "Press Enter with no input when done."
 
@@ -134,9 +342,9 @@ if [[ ${#REPOS[@]} -gt 0 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# [4/8] Web Service
+# [8/10] Web Service
 # ---------------------------------------------------------------------------
-header "[4/8] Web Service (optional)"
+header "[8/10] Web Service (optional)"
 info "Configure your frontend dev server (e.g. Vue, React)."
 
 ask "Configure web service? (y/n)" "y"
@@ -156,11 +364,11 @@ if [[ "$CONFIGURE_WEB" == "y" || "$CONFIGURE_WEB" == "Y" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# [5/8] API Service
+# [9/10] API Service + Databases
 # ---------------------------------------------------------------------------
-header "[5/8] API Service (optional)"
-info "Configure your backend API dev server."
+header "[9/10] API Service & Databases (optional)"
 
+info "-- API Service --"
 ask "Configure API service? (y/n)" "y"
 CONFIGURE_API="$REPLY"
 
@@ -177,10 +385,8 @@ if [[ "$CONFIGURE_API" == "y" || "$CONFIGURE_API" == "Y" ]]; then
   API_START_CMD="$REPLY"
 fi
 
-# ---------------------------------------------------------------------------
-# [6/8] Database Connections
-# ---------------------------------------------------------------------------
-header "[6/8] Database Connections (optional)"
+echo ""
+info "-- Database Connections --"
 info "Add PostgreSQL connections for DB Explorer and SQL metric widgets."
 
 ask "Add database connections? (y/n)" "y"
@@ -220,38 +426,50 @@ if [[ "$CONFIGURE_DBS" == "y" || "$CONFIGURE_DBS" == "Y" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# [7/8] Hivemind Integration
+# Docs directory (for Hivemind /create-bug skill)
 # ---------------------------------------------------------------------------
-header "[7/8] Hivemind Integration (optional)"
-info "Hivemind is the Claude Code shared config system that adds /dashboard and other skills."
+echo ""
+info "-- Documentation (optional) --"
+info "Used by Hivemind /create-bug to create bug documentation files."
 
-HIVEMIND_DIR=""
-SIBLING_HIVEMIND="$(dirname "$SCRIPT_DIR")/hivemind"
-
-if [[ -d "$SIBLING_HIVEMIND" ]]; then
-  success "Found Hivemind at: $SIBLING_HIVEMIND"
-  ask "Use this Hivemind installation? (y/n)" "y"
+DOCS_DIR=""
+DOCS_BUGS_PATH="Bugs/"
+SIBLING_DOCS="$(dirname "$SCRIPT_DIR")/docs"
+if [[ -d "$SIBLING_DOCS" ]]; then
+  success "Found docs sibling at: $SIBLING_DOCS"
+  ask "Use this path? (y/n)" "y"
   if [[ "$REPLY" == "y" || "$REPLY" == "Y" ]]; then
-    HIVEMIND_DIR="$SIBLING_HIVEMIND"
-  fi
-else
-  ask "Path to Hivemind directory (blank to skip)" ""
-  if [[ -n "$REPLY" ]]; then
-    if [[ -d "$REPLY" ]]; then
-      HIVEMIND_DIR="$REPLY"
-      success "Hivemind set to: $HIVEMIND_DIR"
-    else
-      warn "Directory not found — skipping Hivemind integration."
-    fi
+    DOCS_DIR="$SIBLING_DOCS"
   fi
 fi
 
-# ---------------------------------------------------------------------------
-# [8/8] Generate Files
-# ---------------------------------------------------------------------------
-header "[8/8] Generating Configuration Files"
+if [[ -z "$DOCS_DIR" ]]; then
+  ask "Docs directory for bug files (or blank to skip)" ""
+  DOCS_DIR="$REPLY"
+fi
 
-# --- dashboard.config.json ---
+if [[ -n "$DOCS_DIR" ]]; then
+  ask "Bugs subdirectory within docs" "$DOCS_BUGS_PATH"
+  DOCS_BUGS_PATH="${REPLY:-$DOCS_BUGS_PATH}"
+fi
+
+# ---------------------------------------------------------------------------
+# [10/10] Generate Files
+# ---------------------------------------------------------------------------
+header "[10/10] Generating Configuration Files"
+
+# --- Build provider JSON sections ---
+ADO_JSON="null"
+if [[ "$PROVIDER" == "ado" && -n "$ADO_ORG" ]]; then
+  ADO_JSON="{\"org\":$(json_str "$ADO_ORG"),\"project\":$(json_str "$ADO_PROJECT"),\"team\":$(json_str "$ADO_TEAM"),\"users\":$ADO_USERS_JSON,\"prRepos\":$ADO_PR_REPOS_JSON}"
+fi
+
+GITHUB_JSON="null"
+if [[ "$PROVIDER" == "github" && -n "$GITHUB_ORG" ]]; then
+  GITHUB_JSON="{\"org\":$(json_str "$GITHUB_ORG"),\"users\":$GITHUB_USERS_JSON,\"prRepos\":$GITHUB_PR_REPOS_JSON,\"watchRepos\":$GITHUB_WATCH_REPOS_JSON}"
+fi
+
+# --- Build services JSON ---
 WEB_SERVICE_JSON="null"
 if [[ -n "$WEB_REPO_DIR" ]]; then
   WEB_SERVICE_JSON="{\"repoDir\":$(json_str "$WEB_REPO_DIR"),\"port\":$WEB_PORT,\"startCmd\":$(json_str "$WEB_START_CMD")}"
@@ -262,6 +480,7 @@ if [[ -n "$API_REPO_DIR" ]]; then
   API_SERVICE_JSON="{\"repoDir\":$(json_str "$API_REPO_DIR"),\"port\":$API_PORT,\"startCmd\":$(json_str "$API_START_CMD")}"
 fi
 
+# --- dashboard.config.json ---
 cat > "$CONFIG_FILE" <<CONFIGEOF
 {
   "project": $(json_str "$PROJECT_NAME"),
@@ -271,7 +490,9 @@ cat > "$CONFIG_FILE" <<CONFIGEOF
   "services": {
     "web": $WEB_SERVICE_JSON,
     "api": $API_SERVICE_JSON
-  }
+  },
+  "ado": $ADO_JSON,
+  "github": $GITHUB_JSON
 }
 CONFIGEOF
 success "Created dashboard.config.json"
@@ -321,13 +542,76 @@ cd "$SCRIPT_DIR"
 npm install
 success "Dependencies installed"
 
+# --- Shared config: ~/.config/hivemind/config.md ---
+echo ""
+info "Writing shared Hivemind config..."
+mkdir -p "$SHARED_CONFIG_DIR"
+
+REVIEWERS_BLOCK=""
+if [[ ${#REVIEWERS[@]} -gt 0 ]]; then
+  REVIEWERS_BLOCK="reviewers:"
+  for r in "${REVIEWERS[@]}"; do
+    REVIEWERS_BLOCK+=$'\n'"  - $r"
+  done
+fi
+
+DEFAULT_REVIEWERS_BLOCK=""
+if [[ ${#DEFAULT_REVIEWERS[@]} -gt 0 ]]; then
+  DEFAULT_REVIEWERS_BLOCK="default_reviewers:"
+  for r in "${DEFAULT_REVIEWERS[@]}"; do
+    DEFAULT_REVIEWERS_BLOCK+=$'\n'"  - $r"
+  done
+fi
+
+REPOS_LIST_BLOCK=""
+if [[ ${#REPOS_LIST[@]} -gt 0 ]]; then
+  REPOS_LIST_BLOCK="repos:"
+  for r in "${REPOS_LIST[@]}"; do
+    REPOS_LIST_BLOCK+=$'\n'"  - $r"
+  done
+fi
+
+cat > "$SHARED_CONFIG_FILE" <<SHAREDEOF
+# Hivemind Config
+# Generated by H.I.V.E. setup — re-run hive/setup.sh to update.
+# Location: ~/.config/hivemind/config.md
+
+provider: ${PROVIDER}
+
+## Identity
+name: ${NAME}
+email: ${EMAIL}
+
+## ADO Configuration (if provider: ado)
+ado_org: ${ADO_ORG}
+ado_project: ${ADO_PROJECT}
+
+${REVIEWERS_BLOCK}
+
+${REPOS_LIST_BLOCK}
+
+## GitHub Configuration (if provider: github)
+github_org: ${GITHUB_ORG}
+github_user: ${GITHUB_USER}
+
+${DEFAULT_REVIEWERS_BLOCK}
+
+## Paths
+projects_dir: ${PROJECTS_DIR}
+hive_dir: ${SCRIPT_DIR}
+
+## Docs (optional — for bug documentation)
+docs_dir: ${DOCS_DIR}
+docs_bugs_path: ${DOCS_BUGS_PATH}
+SHAREDEOF
+success "Created $SHARED_CONFIG_FILE"
+
 # --- ~/.config/hivemind/paths.env ---
-mkdir -p "$HIVEMIND_PATHS_DIR"
 {
-  echo "HIVE_DIR=$(json_str "$SCRIPT_DIR" | tr -d '"')"
-  [[ -n "$HIVEMIND_DIR" ]] && echo "HIVEMIND_DIR=$(json_str "$HIVEMIND_DIR" | tr -d '"')"
-} > "$HIVEMIND_PATHS_FILE"
-success "Written $HIVEMIND_PATHS_FILE"
+  echo "HIVE_DIR=\"$SCRIPT_DIR\""
+  echo "PROJECTS_DIR=\"$PROJECTS_DIR\""
+} > "$PATHS_ENV_FILE"
+success "Created $PATHS_ENV_FILE"
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -342,17 +626,16 @@ echo -e "  ${CYAN}  npm start${RESET}"
 echo ""
 echo -e "  ${BOLD}Then open:${RESET}  ${CYAN}http://localhost:3333${RESET}"
 echo ""
-
-if [[ -n "$HIVEMIND_DIR" ]]; then
-  echo -e "  ${YELLOW}${BOLD}Hivemind found!${RESET} Run the following to complete integration:"
-  echo -e "  ${CYAN}  cd $(json_str "$HIVEMIND_DIR" | tr -d '"') && ./setup.sh${RESET}"
-  echo ""
-fi
-
 echo -e "  ${CYAN}Generated files (gitignored — local only):${RESET}"
 echo -e "    dashboard.config.json"
 echo -e "    data/databases.json"
 [[ -n "$WEB_REPO_DIR" ]] && echo -e "    run-web.sh"
 [[ -n "$API_REPO_DIR" ]] && echo -e "    run-api.sh"
-echo -e "    $HIVEMIND_PATHS_FILE"
+echo -e "    $SHARED_CONFIG_FILE"
+echo -e "    $PATHS_ENV_FILE"
+echo ""
+echo -e "  ${BOLD}Next steps:${RESET}"
+echo -e "    1. Clone Hivemind (if not already) and run its setup.sh"
+echo -e "       It will detect the config you just created."
+echo -e "    2. Start Claude with: ${CYAN}claude --add-dir /path/to/hivemind${RESET}"
 echo ""
