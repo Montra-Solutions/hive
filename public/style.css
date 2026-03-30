@@ -47,7 +47,7 @@ html, body {
   background: var(--base);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 14px;
   overflow: hidden;
 }
 
@@ -61,7 +61,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: 10px 16px;
   background: var(--mantle);
   border-bottom: 1px solid var(--surface0);
   flex-shrink: 0;
@@ -78,7 +78,7 @@ body {
 }
 
 .header h1 {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text);
 }
@@ -91,7 +91,7 @@ body {
 
 .header-time {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--subtext0);
 }
 
@@ -173,12 +173,12 @@ body {
 }
 
 .tab {
-  padding: 8px 20px;
+  padding: 9px 22px;
   border: none;
   background: transparent;
   color: var(--overlay0);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -241,7 +241,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 8px 12px;
   background: var(--mantle);
   border-bottom: 1px solid var(--surface0);
   flex-shrink: 0;
@@ -260,7 +260,7 @@ body {
   align-items: center;
   gap: 0;
   padding: 0 8px;
-  height: 33px;
+  height: 35px;
   background: var(--base);
   border-bottom: 1px solid var(--surface1);
   overflow-x: auto;
@@ -273,13 +273,13 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 10px;
-  height: 33px;
+  padding: 0 12px;
+  height: 35px;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--subtext0);
   user-select: none;
   white-space: nowrap;
@@ -343,8 +343,8 @@ body {
 }
 
 .layout-btn {
-  font-size: 10px !important;
-  padding: 3px 8px !important;
+  font-size: 11px !important;
+  padding: 4px 10px !important;
   white-space: nowrap;
 }
 .layout-btn:disabled {
@@ -367,7 +367,7 @@ body {
 }
 .template-section-label {
   padding: 6px 12px 3px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--subtext0);
   text-transform: uppercase;
@@ -376,8 +376,8 @@ body {
 .template-item {
   display: flex;
   align-items: center;
-  padding: 7px 8px 7px 12px;
-  font-size: 11px;
+  padding: 8px 8px 8px 12px;
+  font-size: 12px;
   color: var(--text);
   border-radius: 4px;
   cursor: pointer;
@@ -433,9 +433,9 @@ body {
 .widget-picker-item {
   display: block;
   width: 100%;
-  padding: 6px 12px;
+  padding: 7px 14px;
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.1s;
 }
@@ -509,11 +509,11 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
+  padding: 7px 10px;
   background: var(--crust);
   border-bottom: 1px solid var(--surface0);
   flex-shrink: 0;
-  min-height: 28px;
+  min-height: 34px;
   cursor: grab;
 }
 
@@ -539,7 +539,7 @@ body {
 }
 
 .widget-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -562,8 +562,8 @@ body {
   border-radius: 3px;
   color: var(--overlay0);
   cursor: pointer;
-  font-size: 12px;
-  padding: 1px 4px;
+  font-size: 13px;
+  padding: 2px 5px;
   line-height: 1;
   transition: all 0.15s;
 }
@@ -584,7 +584,7 @@ body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px;
+  padding: 10px;
   min-height: 0;
 }
 
@@ -594,7 +594,7 @@ body {
 
 /* Widget body with log containers should have no padding */
 .widget-body .log-container {
-  margin: -8px;
+  margin: -10px;
   border-radius: 0;
 }
 
@@ -622,7 +622,7 @@ body {
    ========================================================================= */
 
 .section-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -632,19 +632,19 @@ body {
 
 .git-table {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .git-row {
   display: grid;
   grid-template-columns: 160px 180px 1fr 100px 24px;
-  padding: 2px 0;
+  padding: 4px 0;
   align-items: center;
 }
 
 .git-header-row {
   color: var(--overlay0);
-  font-size: 11px;
+  font-size: 12px;
   border-bottom: 1px solid var(--surface0);
   padding-bottom: 4px;
   margin-bottom: 2px;
@@ -664,7 +664,7 @@ body {
   border: none;
   padding: 0;
   font: inherit;
-  font-size: 11px;
+  font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -778,12 +778,12 @@ body {
 
 .git-synced {
   color: var(--green);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .git-pull-btn {
-  font-size: 9px !important;
-  padding: 1px 6px !important;
+  font-size: 11px !important;
+  padding: 2px 7px !important;
   background: var(--surface1) !important;
   color: var(--peach) !important;
   border: 1px solid var(--peach) !important;
@@ -797,7 +797,7 @@ body {
 
 .git-pull-error {
   color: var(--red);
-  font-size: 9px;
+  font-size: 11px;
   margin-left: 4px;
   cursor: help;
 }
@@ -941,7 +941,7 @@ body {
 
 .git-file-status {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   padding: 1px 4px;
   border-radius: 3px;
@@ -1051,14 +1051,14 @@ body {
   grid-template-columns: 12px 1fr auto auto auto auto auto;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .status-card:hover { background: var(--surface0); }
@@ -1445,22 +1445,22 @@ body {
 }
 
 /* ── Pipelines widget ─────────────────────────────────────────────────────── */
-.pipeline-list { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
+.pipeline-list { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
 .pipeline-row {
   display: grid;
   grid-template-columns: 1fr auto auto auto auto;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .pipeline-row:hover { background: var(--surface1); }
 .pipeline-name { font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pipeline-meta { color: var(--subtext0); white-space: nowrap; }
 .pipeline-duration { color: var(--overlay1); white-space: nowrap; min-width: 40px; text-align: right; }
 .pipeline-actions { display: flex; gap: 4px; align-items: center; }
-.pipeline-status { font-size: 11px; padding: 2px 7px; border-radius: 10px; white-space: nowrap; font-weight: 500; }
+.pipeline-status { font-size: 12px; padding: 3px 8px; border-radius: 10px; white-space: nowrap; font-weight: 500; }
 .ps-succeeded { background: rgba(166,227,161,0.15); color: var(--green); }
 .ps-failed    { background: rgba(243,139,168,0.15); color: var(--red); }
 .ps-running   { background: rgba(137,180,250,0.15); color: var(--blue); animation: pipeline-pulse 1.4s ease-in-out infinite; }
@@ -1470,18 +1470,18 @@ body {
 @keyframes pipeline-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 .pipeline-approve-btn { background: rgba(249,226,175,0.2); border-color: var(--yellow); color: var(--yellow); font-size: 11px; padding: 2px 8px; }
 .pipeline-approve-btn:hover { background: rgba(249,226,175,0.35); }
-.pipeline-run-btn { font-size: 11px; padding: 2px 8px; }
+.pipeline-run-btn { font-size: 12px; padding: 3px 10px; }
 
 /* ── Activity Feed widget ─────────────────────────────────────────────────── */
-.af-filter-bar { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px 2px; }
+.af-filter-bar { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px 3px; }
 .af-list { display: flex; flex-direction: column; overflow-y: auto; padding: 2px 0; }
 .af-row {
   display: grid;
-  grid-template-columns: 48px 56px 1fr;
+  grid-template-columns: 54px 62px 1fr;
   align-items: baseline;
-  gap: 8px;
-  padding: 5px 8px;
-  font-size: 12px;
+  gap: 10px;
+  padding: 7px 10px;
+  font-size: 13px;
   border-radius: 4px;
   text-decoration: none;
   color: inherit;
@@ -1490,15 +1490,15 @@ body {
 .af-row:hover { background: var(--surface1); }
 a.af-row:hover .af-text { text-decoration: underline; }
 .af-source-badge {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 1px 5px;
+  padding: 2px 6px;
   border-radius: 8px;
   text-align: center;
   white-space: nowrap;
   letter-spacing: 0.02em;
 }
-.af-time { color: var(--overlay1); white-space: nowrap; font-size: 11px; }
+.af-time { color: var(--overlay1); white-space: nowrap; font-size: 12px; }
 .af-text { color: var(--text); }
 .af-level-error   { color: var(--red); }
 .af-level-warning { color: var(--yellow); }
@@ -1572,26 +1572,26 @@ a.af-row:hover .af-text { text-decoration: underline; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px;
+  padding: 8px 12px;
   background: var(--mantle);
   border-bottom: 1px solid var(--surface0);
   flex-shrink: 0;
   position: sticky;
-  top: -8px;
+  top: -10px;
   z-index: 2;
-  margin: -8px -8px 0 -8px;
+  margin: -10px -10px 0 -10px;
 }
 
 .panel-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .status-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   color: var(--overlay0);
 }
@@ -1630,12 +1630,12 @@ a.af-row:hover .af-text { text-decoration: underline; }
 }
 
 .btn {
-  padding: 3px 10px;
+  padding: 5px 12px;
   border: 1px solid var(--surface1);
   border-radius: 4px;
   background: var(--surface0);
   color: var(--subtext1);
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--font-sans);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1870,12 +1870,12 @@ a.af-row:hover .af-text { text-decoration: underline; }
 }
 
 .ado-filter-chip {
-  padding: 2px 8px;
+  padding: 3px 10px;
   border: 1px solid var(--surface1);
   border-radius: 10px;
   background: var(--surface0);
   color: var(--subtext0);
-  font-size: 10px;
+  font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -1924,13 +1924,13 @@ a.af-row:hover .af-text { text-decoration: underline; }
   display: flex;
   gap: 6px;
   align-items: center;
-  padding: 2px 0;
-  font-size: 11px;
+  padding: 4px 0;
+  font-size: 12px;
 }
 
 .ado-wi-type {
-  font-size: 10px;
-  padding: 1px 4px;
+  font-size: 11px;
+  padding: 2px 5px;
   border-radius: 3px;
   font-weight: 600;
   white-space: nowrap;
@@ -1979,7 +1979,7 @@ a.af-row:hover .af-text { text-decoration: underline; }
 .ado-wi-action.copied { opacity: 1; border-color: var(--green); background: rgba(166,227,161,0.15); }
 
 .ado-wi-state {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--subtext0);
   white-space: nowrap;
   margin-left: auto;
@@ -2009,13 +2009,13 @@ a.af-row:hover .af-text { text-decoration: underline; }
 
 /* Sentry level badges */
 .sentry-level {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  padding: 1px 5px;
+  padding: 2px 6px;
   border-radius: 3px;
   flex-shrink: 0;
-  min-width: 38px;
+  min-width: 42px;
   text-align: center;
 }
 
@@ -2026,7 +2026,7 @@ a.af-row:hover .af-text { text-decoration: underline; }
 .sentry-level.debug { background: rgba(108,112,134,0.2); color: var(--overlay0); }
 
 .sentry-counts {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--subtext0);
   white-space: nowrap;
   flex-shrink: 0;
