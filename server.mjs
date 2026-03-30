@@ -2226,6 +2226,164 @@ app.post('/api/ado/pipelines/:id/runs/:runId/approve', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Activity Feed — unified event stream across all sources
+// ---------------------------------------------------------------------------
+
+app.get('/api/activity', async (_req, res) => {
+  const cutoff = new Date(Date.now() - 48 * 3600 * 1000); // 48h window
+  const events = [];
+
+  const push = (source, timestamp, text, url = null, level = 'info') => {
+    const ts = new Date(timestamp);
+    if (isNaN(ts) || ts < cutoff) return;
+    events.push({ source, timestamp: ts.toISOString(), text, url, level });
+  };
+
+  await Promise.all([
+
+    // ── Git commits ────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        const since = new Date(cutoff).toISOString();
+        const all = (await Promise.all(
+          REPOS_RESOLVED.map(r => gitLogRepo(r, [`--after=${since}`, 'HEAD']))
+        )).flat();
+        // Group commits by author+repo within 10-minute windows
+        const groups = new Map();
+        for (const c of all) {
+          const bucket = Math.floor(new Date(c.date) / (10 * 60 * 1000));
+          const key = `${c.repo}|${c.author}|${bucket}`;
+          if (!groups.has(key)) groups.set(key, { ...c, count: 0, latest: c.date });
+          const g = groups.get(key);
+          g.count++;
+          if (new Date(c.date) > new Date(g.latest)) { g.latest = c.date; g.message = c.message; }
+        }
+        for (const g of groups.values()) {
+          const what = g.count === 1 ? `"${g.message}"` : `${g.count} commits`;
+          push('git', g.latest, `${g.author} pushed ${what} to ${g.repo}`);
+        }
+      } catch { /* skip */ }
+    })(),
+
+    // ── ADO work items changed recently ────────────────────────────────────
+    (async () => {
+      if (!isAdoConfigured()) return;
+      try {
+        const project = getAdoProject().replace(/'/g, "''");
+        const wiql = { query: `SELECT [System.Id],[System.Title],[System.State],[System.WorkItemType],[System.AssignedTo],[System.ChangedDate],[System.CreatedDate] FROM workitems WHERE [System.TeamProject]='${project}' AND [System.ChangedDate]>=@today-2 ORDER BY [System.ChangedDate] DESC` };
+        const wiqlUrl = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_apis/wit/wiql?api-version=7.1`;
+        const wiqlRes = await fetch(wiqlUrl, { method: 'POST', headers: adoHeaders(), body: JSON.stringify(wiql), signal: AbortSignal.timeout(10000) });
+        if (!wiqlRes.ok) return;
+        const wiqlData = await wiqlRes.json();
+        const ids = (wiqlData.workItems || []).map(w => w.id).slice(0, 50);
+        if (!ids.length) return;
+        const batchUrl = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_apis/wit/workitems?ids=${ids.join(',')}&fields=System.Id,System.Title,System.State,System.WorkItemType,System.AssignedTo,System.ChangedDate,System.CreatedDate&api-version=7.1`;
+        const batch = await adoFetch(batchUrl);
+        for (const wi of (batch.value || [])) {
+          const f = wi.fields;
+          const who = f['System.AssignedTo']?.displayName || 'Someone';
+          const isNew = f['System.CreatedDate'] === f['System.ChangedDate'];
+          const title = f['System.Title'];
+          const type = f['System.WorkItemType'];
+          const state = f['System.State'];
+          const url = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_workitems/edit/${wi.id}`;
+          const text = isNew
+            ? `New ${type.toLowerCase()}: "${title}" assigned to ${who}`
+            : `${who} updated "${title}" → ${state}`;
+          push('ado', f['System.ChangedDate'], text, url);
+        }
+      } catch { /* skip */ }
+    })(),
+
+    // ── ADO PRs ────────────────────────────────────────────────────────────
+    (async () => {
+      if (!isAdoConfigured()) return;
+      try {
+        const repos = CONFIG.ado?.prRepos || [];
+        for (const repo of repos) {
+          try {
+            const url = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_apis/git/repositories/${repo}/pullrequests?searchCriteria.status=active&api-version=7.1`;
+            const data = await adoFetch(url);
+            for (const pr of (data.value || [])) {
+              const who = pr.createdBy?.displayName || '';
+              const src = pr.sourceRefName?.replace('refs/heads/', '') || '';
+              const tgt = pr.targetRefName?.replace('refs/heads/', '') || '';
+              const prUrl = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_git/${repo}/pullrequest/${pr.pullRequestId}`;
+              push('ado', pr.creationDate, `${who} opened PR: "${pr.title}" (${src} → ${tgt})`, prUrl);
+            }
+          } catch { /* skip repo */ }
+        }
+      } catch { /* skip */ }
+    })(),
+
+    // ── Sentry issues ──────────────────────────────────────────────────────
+    (async () => {
+      if (!getSentryOrg() || !getSentryToken()) return;
+      try {
+        const projects = CONFIG.sentry?.projects || [];
+        for (const project of projects) {
+          try {
+            const url = `${SENTRY_BASE_URL}/api/0/projects/${getSentryOrg()}/${project}/issues/?query=is:unresolved&sort=date&limit=20`;
+            const data = await sentryFetch(url);
+            for (const issue of (Array.isArray(data) ? data : [])) {
+              const level = issue.level === 'fatal' || issue.level === 'error' ? 'error' : 'warning';
+              push('sentry', issue.lastSeen, `${issue.level.toUpperCase()}: ${issue.title}`, issue.permalink, level);
+            }
+          } catch { /* skip project */ }
+        }
+      } catch { /* skip */ }
+    })(),
+
+    // ── GitHub PRs ─────────────────────────────────────────────────────────
+    (async () => {
+      if (!isGithubConfigured()) return;
+      try {
+        const prRepos = CONFIG.github?.prRepos || [];
+        const users = new Set((CONFIG.github?.users || []).map(u => u.toLowerCase()));
+        for (const fullName of prRepos) {
+          try {
+            const data = await githubFetch(`${GITHUB_API}/repos/${fullName}/pulls?state=all&sort=updated&per_page=20`);
+            for (const pr of (Array.isArray(data) ? data : [])) {
+              const login = (pr.user?.login || '').toLowerCase();
+              if (users.size > 0 && !users.has(login)) continue;
+              const merged = pr.merged_at;
+              const ts = merged || pr.created_at;
+              const action = merged ? 'merged' : pr.state === 'closed' ? 'closed' : 'opened';
+              push('github', ts, `${pr.user?.login} ${action} PR #${pr.number}: "${pr.title}"`, pr.html_url, merged ? 'success' : 'info');
+            }
+          } catch { /* skip repo */ }
+        }
+      } catch { /* skip */ }
+    })(),
+
+    // ── GitHub Actions runs ────────────────────────────────────────────────
+    (async () => {
+      if (!isGithubConfigured()) return;
+      try {
+        const watchRepos = CONFIG.github?.watchRepos || [];
+        for (const fullName of watchRepos) {
+          try {
+            const data = await githubFetch(`${GITHUB_API}/repos/${fullName}/actions/runs?per_page=10`);
+            for (const run of (data.workflow_runs || [])) {
+              if (run.status !== 'completed') continue;
+              const ok = run.conclusion === 'success';
+              const repoShort = fullName.split('/').pop();
+              push('github', run.updated_at,
+                `${run.name} ${ok ? 'passed' : 'failed'} on ${repoShort}/${run.head_branch}`,
+                run.html_url, ok ? 'success' : 'error');
+            }
+          } catch { /* skip repo */ }
+        }
+      } catch { /* skip */ }
+    })(),
+
+  ]);
+
+  events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  res.json(events.slice(0, 60));
+});
+
+// ---------------------------------------------------------------------------
 // Unified Commit History & Contributions
 // ---------------------------------------------------------------------------
 const COMMIT_FORMAT = '%H\x1f%h\x1f%an\x1f%aI\x1f%s';
