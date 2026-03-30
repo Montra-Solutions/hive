@@ -730,16 +730,15 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
     if (hasDescription) cls += ' has-desc';
     if (hasTypeSelect) cls += ' has-type';
     div.className = cls;
-    div.draggable = true;
     div.dataset.idx = idx;
 
-    // Drag-to-reorder
+    // Drag-to-reorder (handle-only — set draggable only while grip is held)
     div.addEventListener('dragstart', (e) => {
       dragSrcIdx = idx;
       div.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
     });
-    div.addEventListener('dragend', () => { div.classList.remove('dragging'); dragSrcIdx = null; });
+    div.addEventListener('dragend', () => { div.classList.remove('dragging'); div.draggable = false; dragSrcIdx = null; });
     div.addEventListener('dragover', (e) => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
@@ -761,6 +760,8 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
     grip.className = 'api-kv-grip';
     grip.textContent = '\u2261';
     grip.title = 'Drag to reorder';
+    grip.addEventListener('mousedown', () => { div.draggable = true; });
+    grip.addEventListener('mouseup', () => { div.draggable = false; });
 
     const check = document.createElement('input');
     check.type = 'checkbox';
