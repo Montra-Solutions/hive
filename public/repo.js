@@ -2,10 +2,7 @@
    Repo Viewer — Monaco-based file browser and editor with AI completions
    ========================================================================== */
 
-// SVG icons for tree items (sized to fit the 14px tree row)
-const ICON_FOLDER      = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
-const ICON_FOLDER_OPEN = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><polyline points="1 9 1 19 23 19 23 9 12 9 10 6 1 6 1 9"/></svg>`;
-const ICON_FILE        = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--overlay1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+// SVG icon constants (ICON_FOLDER, ICON_FOLDER_OPEN, ICON_FILE, etc.) defined in app.js
 
 const REPO_TABS_KEY    = 'repo-viewer-tabs';
 const REPO_ACTIVE_KEY  = 'repo-viewer-active';
