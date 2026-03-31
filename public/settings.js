@@ -827,6 +827,8 @@ function wireSettingsEvents(container) {
       setTimeout(() => {
         if (!_settingsDirty) { statusEl.textContent = ''; statusEl.className = 'settings-status'; }
       }, 5000);
+      // Refresh repo dropdown so newly added repos appear immediately
+      if (typeof window.refreshRepoList === 'function') window.refreshRepoList();
     } catch (err) {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save All Changes *';

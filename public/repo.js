@@ -1446,16 +1446,24 @@ async function initRepo() {
   if (!select) return;
 
   // Populate repo dropdown
-  try {
-    const resp  = await fetch('/api/repo/list');
-    const allRepos = await resp.json();
-    const hiddenRepos = typeof getHiddenRepos === 'function' ? getHiddenRepos() : new Set();
-    const repos = allRepos.filter(r => !hiddenRepos.has(r));
-    select.innerHTML = '<option value="">Select a repo…</option>' +
-      repos.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
-  } catch {
-    select.innerHTML = '<option value="">Failed to load repos</option>';
+  async function populateRepoDropdown() {
+    try {
+      const resp  = await fetch('/api/repo/list');
+      const allRepos = await resp.json();
+      const hiddenRepos = typeof getHiddenRepos === 'function' ? getHiddenRepos() : new Set();
+      const repos = allRepos.filter(r => !hiddenRepos.has(r));
+      const prev = select.value;
+      select.innerHTML = '<option value="">Select a repo…</option>' +
+        repos.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+      if (prev && repos.includes(prev)) select.value = prev;
+    } catch {
+      select.innerHTML = '<option value="">Failed to load repos</option>';
+    }
   }
+  await populateRepoDropdown();
+
+  // Allow settings page to refresh the list after config save
+  window.refreshRepoList = populateRepoDropdown;
 
   document.getElementById('repo-new-file-btn')?.addEventListener('click', () => showNewFileInput());
 
