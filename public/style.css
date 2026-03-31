@@ -2858,6 +2858,43 @@ a.af-row:hover .af-text { text-decoration: underline; }
 
 .docs-edit-textarea:focus { border-color: var(--blue); }
 
+/* Wikilink autocomplete dropdown */
+.wikilink-dropdown {
+  position: fixed;
+  z-index: 9999;
+  min-width: 280px;
+  max-width: 420px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface0);
+  border: 1px solid var(--surface1);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  display: none;
+}
+.wikilink-dropdown-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--surface1);
+}
+.wikilink-dropdown-item:last-child { border-bottom: none; }
+.wikilink-dropdown-item.selected {
+  background: var(--surface1);
+}
+.wikilink-dropdown-item:hover {
+  background: var(--surface1);
+}
+.wikilink-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.wikilink-item-path {
+  font-size: 11px;
+  color: var(--overlay0);
+  margin-top: 1px;
+}
+
 .docs-tree {
   flex: 1;
   overflow-y: auto;
@@ -3058,6 +3095,8 @@ a.af-row:hover .af-text { text-decoration: underline; }
 .docs-rendered li { margin: 2px 0; }
 .docs-rendered a { color: var(--blue); text-decoration: none; }
 .docs-rendered a:hover { text-decoration: underline; }
+.docs-rendered a.wiki-link { color: var(--mauve); cursor: pointer; }
+.docs-rendered a.wiki-link:hover { text-decoration: underline; color: var(--lavender); }
 .docs-rendered strong { color: var(--text); }
 .docs-rendered em { color: var(--subtext0); }
 

@@ -555,6 +555,15 @@ function renderDocView(path, data) {
     if (typeof hljs !== 'undefined') hljs.highlightElement(block);
   });
 
+  // Wire wiki-link clicks (must happen after innerHTML insertion)
+  contentEl.querySelectorAll('.wiki-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const rawPath = link.dataset.docPath;
+      if (rawPath) openDocTab(resolveWikilink(rawPath));
+    });
+  });
+
   // Wire edit toggle
   document.getElementById('docs-edit-toggle').addEventListener('click', toggleEdit);
 
@@ -616,9 +625,9 @@ function toggleEdit() {
     textarea.className = 'docs-edit-textarea';
     textarea.id = 'docs-edit-area';
     textarea.value = tab.raw;
-    // Tab key inserts tab instead of changing focus
+    // Tab key inserts tab instead of changing focus (unless autocomplete is open)
     textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Tab') {
+      if (e.key === 'Tab' && (!_wikilinkDropdown || _wikilinkDropdown.style.display === 'none')) {
         e.preventDefault();
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
@@ -627,6 +636,7 @@ function toggleEdit() {
       }
     });
     contentEl.appendChild(textarea);
+    attachWikilinkAutocomplete(textarea);
   } else {
     // Switch to preview mode
     tab.isEditing = false;
@@ -803,9 +813,11 @@ function renderMarkdown(content) {
   });
 
   // Pre-process: Wiki links [[path|display]] or [[path]]
-  content = content.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (match, path, display) => {
-    const label = display || path.split('/').pop();
-    const mdPath = path.endsWith('.md') ? path : path + '.md';
+  // Obsidian escapes the pipe as \| in raw markdown, so match both \| and | as separator
+  content = content.replace(/\[\[([^\]|]+?)\\?\|([^\]]+)\]\]|\[\[([^\]]+?)\]\]/g, (match, pathWithDisplay, display, pathOnly) => {
+    const rawPath = pathWithDisplay || pathOnly;
+    const label = display || rawPath.split('/').pop();
+    const mdPath = rawPath.endsWith('.md') ? rawPath : rawPath + '.md';
     return `<a href="#" class="wiki-link" data-doc-path="${escHtml(mdPath)}">${escHtml(label)}</a>`;
   });
 
@@ -817,18 +829,7 @@ function renderMarkdown(content) {
     });
     const html = marked.parse(content);
 
-    // Post-process: wire up wiki links
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = html;
-    wrapper.querySelectorAll('.wiki-link').forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const docPath = link.dataset.docPath;
-        if (docPath) openDocTab(docPath);
-      });
-    });
-
-    return wrapper.innerHTML;
+    return html;
   }
 
   // Fallback: return escaped content
@@ -1013,3 +1014,199 @@ function expandToDir(path) {
 
 // Expose for global breadcrumb onclick
 window.expandToDir = expandToDir;
+
+// ---------------------------------------------------------------------------
+// Wikilink resolution (Obsidian-style: filename-only links search the vault)
+// ---------------------------------------------------------------------------
+function resolveWikilink(rawPath) {
+  const mdPath = rawPath.endsWith('.md') ? rawPath : rawPath + '.md';
+  // If it already contains a slash, treat as an explicit path
+  if (mdPath.includes('/')) return mdPath;
+  // Search the docs tree for a file matching this name
+  const allFiles = flattenDocsTree(docsTree);
+  const match = allFiles.find(f => f.split('/').pop() === mdPath);
+  return match || mdPath;
+}
+
+// ---------------------------------------------------------------------------
+// Wikilink autocomplete for editor
+// ---------------------------------------------------------------------------
+function flattenDocsTree(nodes, result) {
+  result = result || [];
+  for (const node of nodes) {
+    if (node.type === 'file') {
+      result.push(node.path);
+    } else if (node.children) {
+      flattenDocsTree(node.children, result);
+    }
+  }
+  return result;
+}
+
+let _wikilinkDropdown = null;
+let _wikilinkSelected = 0;
+let _wikilinkMatches = [];
+
+function getWikilinkContext(textarea) {
+  const pos = textarea.selectionStart;
+  const text = textarea.value.substring(0, pos);
+  // Find the last [[ that hasn't been closed
+  const lastOpen = text.lastIndexOf('[[');
+  if (lastOpen === -1) return null;
+  const afterOpen = text.substring(lastOpen + 2);
+  // If there's a ]] between [[ and cursor, the link is closed
+  if (afterOpen.includes(']]')) return null;
+  // If there's a newline, abandon
+  if (afterOpen.includes('\n')) return null;
+  return { start: lastOpen, query: afterOpen };
+}
+
+function showWikilinkDropdown(textarea) {
+  const ctx = getWikilinkContext(textarea);
+  if (!ctx) { hideWikilinkDropdown(); return; }
+
+  const query = ctx.query.toLowerCase();
+  const allFiles = flattenDocsTree(docsTree);
+  // Filter and score: prefer filename match over path match
+  _wikilinkMatches = allFiles
+    .filter(f => f.toLowerCase().includes(query))
+    .sort((a, b) => {
+      const aName = a.split('/').pop().toLowerCase();
+      const bName = b.split('/').pop().toLowerCase();
+      const aNameMatch = aName.includes(query);
+      const bNameMatch = bName.includes(query);
+      if (aNameMatch && !bNameMatch) return -1;
+      if (!aNameMatch && bNameMatch) return 1;
+      const aStarts = aName.startsWith(query);
+      const bStarts = bName.startsWith(query);
+      if (aStarts && !bStarts) return -1;
+      if (!aStarts && bStarts) return 1;
+      return a.localeCompare(b);
+    })
+    .slice(0, 20);
+
+  if (_wikilinkMatches.length === 0) { hideWikilinkDropdown(); return; }
+  _wikilinkSelected = Math.min(_wikilinkSelected, _wikilinkMatches.length - 1);
+
+  if (!_wikilinkDropdown) {
+    _wikilinkDropdown = document.createElement('div');
+    _wikilinkDropdown.className = 'wikilink-dropdown';
+    document.body.appendChild(_wikilinkDropdown);
+  }
+
+  // Position relative to textarea cursor
+  const rect = textarea.getBoundingClientRect();
+  // Approximate cursor position using a mirror div
+  const mirror = document.createElement('div');
+  const style = window.getComputedStyle(textarea);
+  mirror.style.cssText = `position:absolute;visibility:hidden;white-space:pre-wrap;word-wrap:break-word;`
+    + `width:${style.width};font:${style.font};padding:${style.padding};border:${style.border};`
+    + `line-height:${style.lineHeight};letter-spacing:${style.letterSpacing};`;
+  mirror.textContent = textarea.value.substring(0, textarea.selectionStart);
+  const marker = document.createElement('span');
+  marker.textContent = '|';
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+  const markerRect = marker.getBoundingClientRect();
+  const mirrorRect = mirror.getBoundingClientRect();
+  const cursorRelY = markerRect.top - mirrorRect.top;
+  const cursorRelX = markerRect.left - mirrorRect.left;
+  document.body.removeChild(mirror);
+
+  const dropdownTop = rect.top + cursorRelY - textarea.scrollTop + 24;
+  const dropdownLeft = rect.left + Math.min(cursorRelX, rect.width - 320);
+  _wikilinkDropdown.style.top = Math.min(dropdownTop, window.innerHeight - 300) + 'px';
+  _wikilinkDropdown.style.left = Math.max(dropdownLeft, rect.left) + 'px';
+
+  // Render items
+  _wikilinkDropdown.innerHTML = '';
+  _wikilinkMatches.forEach((filePath, i) => {
+    const item = document.createElement('div');
+    item.className = 'wikilink-dropdown-item' + (i === _wikilinkSelected ? ' selected' : '');
+    const name = filePath.split('/').pop().replace(/\.md$/, '');
+    const dir = filePath.substring(0, filePath.lastIndexOf('/')) || '';
+    item.innerHTML = `<div class="wikilink-item-name">${escHtml(name)}</div>`
+      + `<div class="wikilink-item-path">${escHtml(dir)}</div>`;
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      acceptWikilinkCompletion(textarea, filePath);
+    });
+    item.addEventListener('mouseenter', () => {
+      _wikilinkSelected = i;
+      _wikilinkDropdown.querySelectorAll('.wikilink-dropdown-item').forEach((el, j) => {
+        el.classList.toggle('selected', j === i);
+      });
+    });
+    _wikilinkDropdown.appendChild(item);
+  });
+
+  _wikilinkDropdown.style.display = 'block';
+  // Scroll selected into view
+  const selectedEl = _wikilinkDropdown.querySelector('.selected');
+  if (selectedEl) selectedEl.scrollIntoView({ block: 'nearest' });
+}
+
+function hideWikilinkDropdown() {
+  if (_wikilinkDropdown) {
+    _wikilinkDropdown.style.display = 'none';
+  }
+  _wikilinkSelected = 0;
+  _wikilinkMatches = [];
+}
+
+function acceptWikilinkCompletion(textarea, filePath) {
+  const ctx = getWikilinkContext(textarea);
+  if (!ctx) return;
+  // Remove .md extension for the wiki link path
+  const linkPath = filePath.replace(/\.md$/, '');
+  const before = textarea.value.substring(0, ctx.start + 2);
+  const after = textarea.value.substring(textarea.selectionStart);
+  // If after already starts with ]], don't double-close
+  const suffix = after.startsWith(']]') ? '' : ']]';
+  textarea.value = before + linkPath + suffix + after;
+  const newPos = ctx.start + 2 + linkPath.length + suffix.length;
+  textarea.selectionStart = textarea.selectionEnd = newPos;
+  textarea.focus();
+  hideWikilinkDropdown();
+  // Update tab raw content
+  const tab = getActiveTab();
+  if (tab) tab.raw = textarea.value;
+}
+
+function attachWikilinkAutocomplete(textarea) {
+  textarea.addEventListener('input', () => {
+    showWikilinkDropdown(textarea);
+  });
+
+  textarea.addEventListener('keydown', (e) => {
+    if (!_wikilinkDropdown || _wikilinkDropdown.style.display === 'none') return;
+    if (_wikilinkMatches.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _wikilinkSelected = (_wikilinkSelected + 1) % _wikilinkMatches.length;
+      showWikilinkDropdown(textarea);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _wikilinkSelected = (_wikilinkSelected - 1 + _wikilinkMatches.length) % _wikilinkMatches.length;
+      showWikilinkDropdown(textarea);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      acceptWikilinkCompletion(textarea, _wikilinkMatches[_wikilinkSelected]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      hideWikilinkDropdown();
+    }
+  });
+
+  textarea.addEventListener('blur', () => {
+    // Delay to allow mousedown on dropdown items
+    setTimeout(hideWikilinkDropdown, 200);
+  });
+
+  textarea.addEventListener('scroll', () => {
+    if (_wikilinkDropdown && _wikilinkDropdown.style.display !== 'none') {
+      showWikilinkDropdown(textarea);
+    }
+  });
+}
