@@ -24,7 +24,8 @@ H.I.V.E. is a single-page dashboard you run locally alongside your dev environme
 It's designed for developers who want one tab that tells them everything:
 
 - Is my API running? What's it logging right now?
-- Which repos have uncommitted changes?
+- Which repos have uncommitted changes? 
+- Which branch am I on?
 - Did production just go down?
 - What does the open ticket count look like this week?
 - What's in this database table?
