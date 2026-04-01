@@ -128,3 +128,27 @@ REST endpoints are defined before the `io.on('connection', ...)` block. Socket.I
 | `GET` | `/api/db/query` | Run an ad-hoc DB query |
 
 SQL queries from the Metric Creator are validated server-side with `isMetricQuerySafe()` — only `SELECT` is allowed; `INSERT`, `UPDATE`, `DELETE`, `DROP`, etc. are rejected.
+
+---
+
+## Claude Code Skills
+
+This repo is the shared `--add-dir` for the Montra.io platform team. Load it at session start:
+
+```powershell
+claude --add-dir C:\Users\Ryan Gordon\Projects\hive
+```
+
+| Skill | Command | Description |
+|---|---|---|
+| create-bug | `/create-bug` | Create a bug — ADO work item, Obsidian doc, and git branch |
+| create-feature | `/create-feature` | Create a feature work item and branch |
+| create-pr | `/create-pr` | Create an ADO pull request with auto work item linking |
+| create-story | `/create-story` | Create a user story work item and branch |
+| dashboard | `/dashboard` | Launch or stop the H.I.V.E. dashboard |
+| handoff | `/handoff` | Translate a frozen PRD into implementation-ready tasks |
+| prd | `/prd` | Generate a concise Product Requirements Document |
+| release | `/release` | Cut a release — changelog, version bump, PR |
+| repos | `/repos` | Show status across all Montra.io repos |
+| stash-branch | `/stash-branch` | Move uncommitted changes to a new branch |
+| validate | `/validate` | Validate implementation against a PRD |
