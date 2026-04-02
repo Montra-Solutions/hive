@@ -79,7 +79,7 @@ WIDGET_REGISTRY['github'] = {
     }
 
     // PRs
-    html += `<div class="section-title">Open Pull Requests</div>`;
+    html += `<div class="section-title">Open PRs</div>`;
     if (!prs.length) {
       html += `<div class="github-empty">No open PRs</div>`;
     } else {

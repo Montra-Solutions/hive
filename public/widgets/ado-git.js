@@ -75,7 +75,7 @@ WIDGET_REGISTRY['ado-git'] = {
     }
 
     // Active PRs
-    html += `<div class="section-title">Active PRs</div>`;
+    html += `<div class="section-title">Open PRs</div>`;
     if (!prs.length) {
       html += `<div class="github-empty">No active PRs</div>`;
     } else {

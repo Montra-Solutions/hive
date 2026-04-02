@@ -627,7 +627,12 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--overlay0);
+  margin-top: 16px;
   margin-bottom: 8px;
+}
+.section-title:first-child,
+.section-title[style*="margin-top:0"] {
+  margin-top: 0;
 }
 
 .git-table {
