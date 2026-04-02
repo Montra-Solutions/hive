@@ -2184,6 +2184,34 @@ a.af-row:hover .af-text { text-decoration: underline; }
   gap: 8px;
   margin-bottom: 8px;
 }
+.repo-disc-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  position: relative;
+}
+.repo-disc-search-icon {
+  color: var(--subtext0);
+  flex-shrink: 0;
+}
+.repo-disc-search-input {
+  width: 180px;
+  font-size: 12px;
+  padding: 3px 24px 3px 6px;
+}
+.repo-disc-search-clear {
+  position: absolute;
+  right: 4px;
+  background: none;
+  border: none;
+  color: var(--subtext0);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.repo-disc-search-clear:hover { color: var(--text); }
 .repo-discover-results { margin-top: 4px; }
 
 .repo-disc-row {

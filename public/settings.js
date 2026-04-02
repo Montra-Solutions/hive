@@ -394,6 +394,11 @@ function renderSectionBody(section) {
       html += `<div class="repo-discover-header">`;
       html += `<span class="settings-label">Discover from ADO &amp; GitHub</span>`;
       html += `<button class="btn repo-discover-scan-btn">↻ Scan</button>`;
+      html += `<div class="repo-disc-search" style="display:none">`;
+      html += `<svg class="repo-disc-search-icon" viewBox="0 0 16 16" width="14" height="14"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="10" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+      html += `<input type="text" class="settings-input repo-disc-search-input" placeholder="Filter repos…">`;
+      html += `<button class="repo-disc-search-clear" title="Clear" style="display:none">✕</button>`;
+      html += `</div>`;
       html += `</div>`;
       html += `<div class="repo-discover-results"></div>`;
       html += `</div>`;
@@ -945,6 +950,25 @@ function wireRepoDiscovery(container, markDirty) {
   const scanBtn = container.querySelector('.repo-discover-scan-btn');
   if (!scanBtn) return;
   const resultsEl = container.querySelector('.repo-discover-results');
+  const searchWrap = container.querySelector('.repo-disc-search');
+  const searchInput = container.querySelector('.repo-disc-search-input');
+  const searchClear = container.querySelector('.repo-disc-search-clear');
+
+  // Filter discovered repo rows by search text
+  function filterRows() {
+    const q = (searchInput.value || '').toLowerCase();
+    searchClear.style.display = q ? 'block' : 'none';
+    resultsEl.querySelectorAll('.repo-disc-row').forEach(row => {
+      const name = (row.dataset.name || '').toLowerCase();
+      const show = !q || name.includes(q);
+      row.style.display = show ? '' : 'none';
+      // Also hide/show the clone panel that follows this row
+      const panel = resultsEl.querySelector(`.repo-disc-clone-panel[data-name="${row.dataset.name}"]`);
+      if (panel && !show) panel.style.display = 'none';
+    });
+  }
+  searchInput.addEventListener('input', filterRows);
+  searchClear.addEventListener('click', () => { searchInput.value = ''; filterRows(); searchInput.focus(); });
 
   function addToConfig(repoName, rowEl) {
     if (!_settingsConfig.repos) _settingsConfig.repos = [];
@@ -1004,6 +1028,11 @@ function wireRepoDiscovery(container, markDirty) {
       }
     }
     resultsEl.innerHTML = html;
+
+    // Show search filter when more than 1 repo
+    searchWrap.style.display = repos.length > 1 ? 'flex' : 'none';
+    searchInput.value = '';
+    searchClear.style.display = 'none';
 
     // Wire Add buttons
     resultsEl.querySelectorAll('.repo-disc-add').forEach(btn => {
