@@ -1500,6 +1500,13 @@ a.af-row:hover .af-text { text-decoration: underline; }
 }
 .af-time { color: var(--overlay1); white-space: nowrap; font-size: 13px; }
 .af-text { color: var(--text); }
+.af-repo {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--overlay0);
+  font-weight: 400;
+}
 .af-level-error   { color: var(--red); }
 .af-level-warning { color: var(--yellow); }
 .af-level-success { color: var(--green); }

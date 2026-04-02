@@ -69,10 +69,11 @@ WIDGET_REGISTRY['activity-feed'] = {
       const levelClass = e.level === 'error' ? 'af-level-error' :
                          e.level === 'warning' ? 'af-level-warning' :
                          e.level === 'success' ? 'af-level-success' : '';
+      const repoTag = e.repo ? `<span class="af-repo">${esc(e.repo)}</span>` : '';
       const inner = `
         <span class="af-source-badge" style="background:${cfg.bg};color:${cfg.color}">${cfg.label}</span>
         <span class="af-time">${_afTimeAgo(e.timestamp)}</span>
-        <span class="af-text ${levelClass}">${esc(e.text)}</span>`;
+        <span class="af-text ${levelClass}">${esc(e.text)}${repoTag}</span>`;
       return e.url
         ? `<a class="af-row" href="${esc(e.url)}" target="_blank" rel="noopener">${inner}</a>`
         : `<div class="af-row">${inner}</div>`;

@@ -2234,10 +2234,12 @@ app.get('/api/activity', async (_req, res) => {
   const cutoff = new Date(Date.now() - 48 * 3600 * 1000); // 48h window
   const events = [];
 
-  const push = (source, timestamp, text, url = null, level = 'info') => {
+  const push = (source, timestamp, text, url = null, level = 'info', repo = null) => {
     const ts = new Date(timestamp);
     if (isNaN(ts) || ts < cutoff) return;
-    events.push({ source, timestamp: ts.toISOString(), text, url, level });
+    const ev = { source, timestamp: ts.toISOString(), text, url, level };
+    if (repo) ev.repo = repo;
+    events.push(ev);
   };
 
   await Promise.all([
@@ -2261,7 +2263,7 @@ app.get('/api/activity', async (_req, res) => {
         }
         for (const g of groups.values()) {
           const what = g.count === 1 ? `"${g.message}"` : `${g.count} commits`;
-          push('git', g.latest, `${g.author} pushed ${what} to ${g.repo}`);
+          push('git', g.latest, `${g.author} pushed ${what} to ${g.repo}`, null, 'info', g.repo);
         }
       } catch { /* skip */ }
     })(),
@@ -2291,7 +2293,7 @@ app.get('/api/activity', async (_req, res) => {
           const text = isNew
             ? `New ${type.toLowerCase()}: "${title}" assigned to ${who}`
             : `${who} updated "${title}" → ${state}`;
-          push('ado', f['System.ChangedDate'], text, url);
+          push('ado', f['System.ChangedDate'], text, url, 'info', type);
         }
       } catch { /* skip */ }
     })(),
@@ -2310,7 +2312,7 @@ app.get('/api/activity', async (_req, res) => {
               const src = pr.sourceRefName?.replace('refs/heads/', '') || '';
               const tgt = pr.targetRefName?.replace('refs/heads/', '') || '';
               const prUrl = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_git/${repo}/pullrequest/${pr.pullRequestId}`;
-              push('ado', pr.creationDate, `${who} opened PR: "${pr.title}" (${src} → ${tgt})`, prUrl);
+              push('ado', pr.creationDate, `${who} opened PR: "${pr.title}" (${src} → ${tgt})`, prUrl, 'info', repo);
             }
           } catch { /* skip repo */ }
         }
@@ -2328,7 +2330,7 @@ app.get('/api/activity', async (_req, res) => {
             const data = await sentryFetch(url);
             for (const issue of (Array.isArray(data) ? data : [])) {
               const level = issue.level === 'fatal' || issue.level === 'error' ? 'error' : 'warning';
-              push('sentry', issue.lastSeen, `${issue.level.toUpperCase()}: ${issue.title}`, issue.permalink, level);
+              push('sentry', issue.lastSeen, `${issue.level.toUpperCase()}: ${issue.title}`, issue.permalink, level, project);
             }
           } catch { /* skip project */ }
         }
@@ -2350,7 +2352,8 @@ app.get('/api/activity', async (_req, res) => {
               const merged = pr.merged_at;
               const ts = merged || pr.created_at;
               const action = merged ? 'merged' : pr.state === 'closed' ? 'closed' : 'opened';
-              push('github', ts, `${pr.user?.login} ${action} PR #${pr.number}: "${pr.title}"`, pr.html_url, merged ? 'success' : 'info');
+              const repoName = fullName.split('/').pop();
+              push('github', ts, `${pr.user?.login} ${action} PR #${pr.number}: "${pr.title}"`, pr.html_url, merged ? 'success' : 'info', repoName);
             }
           } catch { /* skip repo */ }
         }
@@ -2371,7 +2374,7 @@ app.get('/api/activity', async (_req, res) => {
               const repoShort = fullName.split('/').pop();
               push('github', run.updated_at,
                 `${run.name} ${ok ? 'passed' : 'failed'} on ${repoShort}/${run.head_branch}`,
-                run.html_url, ok ? 'success' : 'error');
+                run.html_url, ok ? 'success' : 'error', repoShort);
             }
           } catch { /* skip repo */ }
         }
