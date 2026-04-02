@@ -1515,8 +1515,15 @@ async function sendRequest() {
     // Send request — direct fetch with FormData for file uploads, proxy for everything else
     let response;
     if (hasFiles) {
-      // Build native FormData and send directly (proxy can't handle binary)
+      // Route file uploads through server proxy to avoid CORS
       const fd = new FormData();
+      // Meta fields for the proxy (prefixed with _target_ to avoid collisions)
+      fd.append('_target_url', url);
+      fd.append('_target_method', method);
+      fd.append('_target_headers', JSON.stringify(resolvedHeaders));
+      const reqTimeout = parseInt(document.getElementById('api-timeout').value) || 600000;
+      fd.append('_target_timeout', String(reqTimeout));
+      // Append form-data fields (files + text)
       for (const row of bodyFormData) {
         if (row.enabled === false || !row.key) continue;
         if (row.type === 'file' && row._file) {
@@ -1525,22 +1532,8 @@ async function sendRequest() {
           fd.append(row.key, resolveVariables(row.value || ''));
         }
       }
-      // Don't set Content-Type — browser sets it with correct multipart boundary
-      const directHeaders = { ...resolvedHeaders };
-      delete directHeaders['Content-Type'];
-      const startTime = performance.now();
-      try {
-        const directRes = await fetch(url, { method, headers: directHeaders, body: fd });
-        const elapsed = Math.round(performance.now() - startTime);
-        const resHeaders = {};
-        directRes.headers.forEach((v, k) => { resHeaders[k] = v; });
-        const resText = await directRes.text();
-        let resBody = resText;
-        try { resBody = JSON.parse(resText); resBody = JSON.stringify(resBody, null, 2); } catch {}
-        response = { status: directRes.status, body: resBody, headers: resHeaders, time: elapsed, size: resText.length };
-      } catch (fetchErr) {
-        response = { error: true, status: 0, body: fetchErr.message, headers: {}, time: 0, size: 0 };
-      }
+      const proxyRes = await fetch('/api/proxy/upload', { method: 'POST', body: fd });
+      response = await proxyRes.json();
     } else {
       const reqTimeout = parseInt(document.getElementById('api-timeout').value) || 600000;
       const proxyRes = await fetch('/api/proxy', {
@@ -1859,7 +1852,8 @@ function renderCollapsibleJson(container, data, indent = 0) {
   });
 
   container.appendChild(block);
-  container.appendChild(document.createTextNode(close));
+  const closeBrace = document.createTextNode(close);
+  container.appendChild(closeBrace);
 
   toggle.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1868,8 +1862,6 @@ function renderCollapsibleJson(container, data, indent = 0) {
     openBrace.textContent = collapsed ? open : '';
     preview.style.display = collapsed ? 'none' : 'inline';
     toggle.textContent = collapsed ? '\u25BE' : '\u25B8'; // ▾ or ▸
-    // hide/show the close brace (last text node)
-    const closeBrace = container.lastChild;
     closeBrace.textContent = collapsed ? close : '';
   });
 }

@@ -13,6 +13,7 @@ import express from 'express';
 import pg from 'pg';
 import { Server as SocketIO } from 'socket.io';
 import AdmZip from 'adm-zip';
+import multer from 'multer';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -3748,6 +3749,73 @@ app.post('/api/proxy', async (req, res) => {
     // Include the underlying cause (e.g. ECONNREFUSED) for better debugging
     const detail = err.cause ? `${err.message}: ${err.cause.message || err.cause.code || err.cause}` : err.message;
     console.error(`[proxy] FAILED ${method} ${url} — ${detail}`);
+    res.json({
+      error: true,
+      status: 0,
+      statusText: '',
+      headers: {},
+      body: detail,
+      time: Date.now() - start,
+      size: 0,
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// API Client — file upload proxy (multipart/form-data forwarding)
+// ---------------------------------------------------------------------------
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+app.post('/api/proxy/upload', upload.any(), async (req, res) => {
+  const { _target_url, _target_method = 'POST', _target_headers = '{}', _target_timeout = '600000' } = req.body || {};
+  if (!_target_url) return res.json({ error: true, body: 'URL is required', status: 0, statusText: '', headers: {}, time: 0, size: 0 });
+
+  console.log(`[proxy/upload] ${_target_method} ${_target_url} (files=${(req.files || []).length})`);
+  const start = Date.now();
+  const maxTimeout = 600000;
+
+  try {
+    // Rebuild FormData for the outbound request
+    const fd = new FormData();
+    for (const file of (req.files || [])) {
+      const blob = new Blob([file.buffer], { type: file.mimetype });
+      fd.append(file.fieldname, blob, file.originalname);
+    }
+    // Append non-meta text fields
+    for (const [key, val] of Object.entries(req.body || {})) {
+      if (key.startsWith('_target_')) continue;
+      fd.append(key, val);
+    }
+
+    // Parse forwarded headers, strip Content-Type so fetch sets multipart boundary
+    const fwdHeaders = JSON.parse(_target_headers);
+    delete fwdHeaders['Content-Type'];
+    delete fwdHeaders['content-type'];
+
+    const fetchOpts = {
+      method: _target_method.toUpperCase(),
+      headers: fwdHeaders,
+      body: fd,
+      signal: AbortSignal.timeout(Math.min(parseInt(_target_timeout) || maxTimeout, maxTimeout)),
+      redirect: 'follow',
+    };
+
+    const response = await fetch(_target_url, fetchOpts);
+    const time = Date.now() - start;
+    const responseBody = await response.text();
+    const responseHeaders = {};
+    response.headers.forEach((val, key) => { responseHeaders[key] = val; });
+
+    res.json({
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+      body: responseBody,
+      time,
+      size: Buffer.byteLength(responseBody, 'utf-8'),
+    });
+  } catch (err) {
+    const detail = err.cause ? `${err.message}: ${err.cause.message || err.cause.code || err.cause}` : err.message;
+    console.error(`[proxy/upload] FAILED ${_target_method} ${_target_url} — ${detail}`);
     res.json({
       error: true,
       status: 0,
