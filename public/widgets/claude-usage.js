@@ -58,6 +58,8 @@ WIDGET_REGISTRY['claude-usage'] = {
     };
 
     socket.on('claude-usage', this._handler);
+    // Request data immediately in case the socket connected before this listener registered
+    socket.emit('refresh', 'claude');
   },
 
   refresh(socket) {
