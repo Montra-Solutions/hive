@@ -2090,6 +2090,7 @@ app.get('/api/ado/prs', async (_req, res) => {
             sourceBranch: pr.sourceRefName?.replace('refs/heads/', ''),
             targetBranch: pr.targetRefName?.replace('refs/heads/', ''),
             url: `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_git/${repo}/pullrequest/${pr.pullRequestId}`,
+            updatedAt: pr.lastMergeSourceCommit?.author?.date || pr.creationDate || null,
           });
         }
       } catch {
@@ -2098,6 +2099,31 @@ app.get('/api/ado/prs', async (_req, res) => {
     }
 
     res.json(allPrs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/ado/repo-activity', async (_req, res) => {
+  if (!isAdoConfigured()) return res.status(404).json({ error: 'ADO not configured' });
+  const repos = CONFIG.ado?.prRepos || [];
+  try {
+    const results = await Promise.all(repos.map(async (repo) => {
+      try {
+        // Get default branch name from repo metadata
+        const repoMeta = await adoFetch(`${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_apis/git/repositories/${repo}?api-version=7.1`);
+        const defaultBranch = (repoMeta.defaultBranch || 'refs/heads/main').replace('refs/heads/', '');
+        // Get latest commit on default branch
+        const statsUrl = `${ADO_BASE_URL}/${getAdoOrg()}/${encodeURIComponent(getAdoProject())}/_apis/git/repositories/${repo}/stats/branches?name=${encodeURIComponent(defaultBranch)}&api-version=7.1`;
+        const stats = await adoFetch(statsUrl);
+        return {
+          repo,
+          defaultBranch,
+          pushedAt: stats.commit?.author?.date || stats.commit?.committer?.date || null,
+        };
+      } catch { return { repo, defaultBranch: 'main', pushedAt: null }; }
+    }));
+    res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

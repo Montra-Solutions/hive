@@ -43,7 +43,6 @@ WIDGET_REGISTRY['ado'] = {
     this._userFilter = localStorage.getItem('ado-user-filter') || 'all';
     this._viewMode = localStorage.getItem('ado-view-mode') || 'list';
     this._cachedItems = [];
-    this._cachedPrs = [];
 
     contentEl.querySelector('#widget-ado-view-toggle').addEventListener('click', () => {
       this._viewMode = this._viewMode === 'list' ? 'kanban' : 'list';
@@ -95,20 +94,14 @@ WIDGET_REGISTRY['ado'] = {
         });
       }
 
-      const [itemsRes, prsRes] = await Promise.all([
-        fetch(wiUrl),
-        fetch('/api/ado/prs'),
-      ]);
-
+      const itemsRes = await fetch(wiUrl);
       let items = await itemsRes.json();
-      const prs = await prsRes.json();
 
       if (this._userFilter !== 'all' && Array.isArray(items)) {
         items = items.filter(wi => (wi.assignedTo || '').includes(this._userFilter));
       }
 
       this._cachedItems = Array.isArray(items) ? items : [];
-      this._cachedPrs = Array.isArray(prs) ? prs : [];
       this._render(contentEl);
     } catch (err) {
       const el = contentEl.querySelector('#widget-ado-content');
@@ -135,21 +128,9 @@ WIDGET_REGISTRY['ado'] = {
 
   _renderList(el) {
     const items = this._cachedItems;
-    const prs = this._cachedPrs;
     const DASH = window.DASH_CONFIG || {};
 
     let html = '';
-    if (prs.length > 0) {
-      html += '<div class="ado-pr-list"><div class="section-title" style="margin-top:0">Active PRs</div>';
-      for (const pr of prs) {
-        html += `<div class="ado-pr-item">
-          <span class="ado-pr-repo">${esc(pr.repo)}</span>
-          <span class="ado-pr-title"><a href="${esc(pr.url)}" target="_blank">${esc(pr.title)}</a></span>
-        </div>`;
-      }
-      html += '</div>';
-    }
-
     if (items.length > 0) {
       for (const group of this._defaultGroups) {
         const groupItems = items.filter(wi => group.states.includes(wi.state));
@@ -173,23 +154,10 @@ WIDGET_REGISTRY['ado'] = {
 
   _renderKanban(el) {
     const items = this._cachedItems;
-    const prs = this._cachedPrs;
     const DASH = window.DASH_CONFIG || {};
     const orderedGroups = this._getOrderedGroups();
 
-    let html = '';
-    if (prs.length > 0) {
-      html += '<div class="ado-pr-list"><div class="section-title" style="margin-top:0">Active PRs</div>';
-      for (const pr of prs) {
-        html += `<div class="ado-pr-item">
-          <span class="ado-pr-repo">${esc(pr.repo)}</span>
-          <span class="ado-pr-title"><a href="${esc(pr.url)}" target="_blank">${esc(pr.title)}</a></span>
-        </div>`;
-      }
-      html += '</div>';
-    }
-
-    html += '<div class="ado-kanban">';
+    let html = '<div class="ado-kanban">';
     for (const group of orderedGroups) {
       const groupItems = items.filter(wi => group.states.includes(wi.state));
       html += `<div class="ado-kanban-col" data-target-state="${esc(group.targetState)}">
