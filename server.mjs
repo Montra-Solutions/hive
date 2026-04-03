@@ -1998,6 +1998,7 @@ app.post('/api/ado/work-items', async (req, res) => {
     const patchBody = [
       { op: 'add', path: '/fields/System.Title', value: title },
       { op: 'add', path: '/fields/System.State', value: 'Active' },
+      { op: 'add', path: '/fields/Custom.UIChangeRequired', value: 'No' },
     ];
     if (description) {
       const field = type === 'Bug' ? '/fields/Microsoft.VSTS.TCM.ReproSteps' : '/fields/System.Description';
