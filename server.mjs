@@ -543,6 +543,7 @@ app.get('/api/config', (_req, res) => {
     repos: REPOS,
     externalMonitors: CONFIG.externalMonitors || [],
     dataDir: getDataDir(),
+    apiDir: getApiDir(),
     privateDataDir: getPrivateDataDir(),
     docsDir: getDocsDir(),
   });
@@ -739,6 +740,8 @@ function resolveDataDir(configured, fallback) {
 
 function getDataDir() { return resolveDataDir(CONFIG.dataDir, join(__dirname, 'data')); }
 function getPrivateDataDir() { return resolveDataDir(CONFIG.privateDataDir, join(homedir(), '.config', 'hive', 'data')); }
+function getApiDir() { return join(getDataDir(), 'api'); }
+function getPrivateApiDir() { return join(getPrivateDataDir(), 'api'); }
 const SEED_DIR = join(__dirname, 'data'); // seed files always from hive install
 
 function ensureDir(dir) {
@@ -772,7 +775,7 @@ const DEFAULT_ENVIRONMENTS = [];
 // "inherit from parent", but our earlier importer mapped them all to "none".
 // ---------------------------------------------------------------------------
 (function migrateAuthInherit() {
-  const collections = readJsonFile('collections.json', []);
+  const collections = readJsonFile('collections.json', [], getApiDir());
   let changed = false;
 
   function fixAuth(node, isRoot) {
@@ -785,7 +788,7 @@ const DEFAULT_ENVIRONMENTS = [];
   }
 
   for (const coll of collections) fixAuth(coll, true);
-  if (changed) writeJsonFile('collections.json', collections);
+  if (changed) writeJsonFile('collections.json', collections, getApiDir());
 })();
 
 // ---------------------------------------------------------------------------
@@ -793,7 +796,7 @@ const DEFAULT_ENVIRONMENTS = [];
 // Existing imported collections may lack these fields.
 // ---------------------------------------------------------------------------
 (function migrateCollectionScriptsAndVars() {
-  const collections = readJsonFile('collections.json', []);
+  const collections = readJsonFile('collections.json', [], getApiDir());
   let changed = false;
 
   function seedFields(node) {
@@ -804,7 +807,7 @@ const DEFAULT_ENVIRONMENTS = [];
   }
 
   for (const coll of collections) seedFields(coll);
-  if (changed) writeJsonFile('collections.json', collections);
+  if (changed) writeJsonFile('collections.json', collections, getApiDir());
 })();
 
 // ---------------------------------------------------------------------------
@@ -3401,7 +3404,7 @@ app.put('/api/user-prefs', (req, res) => {
 // ---------------------------------------------------------------------------
 // Phase 8: Docs browser endpoints
 // ---------------------------------------------------------------------------
-function getDocsDir() { return resolveDataDir(CONFIG.docsDir, join(BASE_DIR, 'docs')); }
+function getDocsDir() { return resolveDataDir(CONFIG.docsDir, join(getDataDir(), 'docs')); }
 const DOCS_SKIP = new Set(CONFIG.docsSkipDirs || ['.git', 'node_modules', '.obsidian', '.trash']);
 let docsTreeCache = null;
 let docsTreeCacheTime = 0;
@@ -4270,8 +4273,8 @@ app.post('/api/script/run', async (req, res) => {
 // API Client — collections CRUD
 // ---------------------------------------------------------------------------
 app.get('/api/collections', (_req, res) => {
-  let shared = readJsonFile('collections.json', [], getDataDir());
-  let private_ = readJsonFile('collections.json', [], getPrivateDataDir());
+  let shared = readJsonFile('collections.json', [], getApiDir());
+  let private_ = readJsonFile('collections.json', [], getPrivateApiDir());
 
   // Seed with demo collection on first run (write to shared)
   if (shared.length === 0 && private_.length === 0) {
@@ -4279,7 +4282,7 @@ app.get('/api/collections', (_req, res) => {
     if (existsSync(seedPath)) {
       try {
         shared = JSON.parse(readFileSync(seedPath, 'utf8'));
-        writeJsonFile('collections.json', shared, getDataDir());
+        writeJsonFile('collections.json', shared, getApiDir());
       } catch { /* ignore seed errors */ }
     }
   }
@@ -4294,7 +4297,7 @@ app.get('/api/collections', (_req, res) => {
 });
 
 app.put('/api/collections', (req, res) => {
-  const target = req.query.target === 'shared' ? getDataDir() : getPrivateDataDir();
+  const target = req.query.target === 'shared' ? getApiDir() : getPrivateApiDir();
   // Strip _source markers before saving
   const cleaned = (Array.isArray(req.body) ? req.body : []).map(({ _source, ...rest }) => rest);
   writeJsonFile('collections.json', cleaned, target);
@@ -4364,7 +4367,7 @@ app.post('/api/collections/import', (req, res) => {
   }
 
   // Append to existing collections (imports go to private by default)
-  const target = req.query.target === 'shared' ? getDataDir() : getPrivateDataDir();
+  const target = req.query.target === 'shared' ? getApiDir() : getPrivateApiDir();
   const collections = readJsonFile('collections.json', [], target);
   collections.push(collection);
   writeJsonFile('collections.json', collections, target);
@@ -4549,7 +4552,7 @@ app.post('/api/collections/import-postman', (req, res) => {
     requests: converted.requests,
   };
 
-  const target = req.query.target === 'shared' ? getDataDir() : getPrivateDataDir();
+  const target = req.query.target === 'shared' ? getApiDir() : getPrivateApiDir();
   const collections = readJsonFile('collections.json', [], target);
   collections.push(collection);
   writeJsonFile('collections.json', collections, target);
@@ -4601,9 +4604,9 @@ app.post('/api/environments/import-postman', (req, res) => {
     })).filter(v => v.key),
   };
 
-  const environments = readJsonFile('environments.json', DEFAULT_ENVIRONMENTS);
+  const environments = readJsonFile('environments.json', DEFAULT_ENVIRONMENTS, getApiDir());
   environments.push(env);
-  writeJsonFile('environments.json', environments);
+  writeJsonFile('environments.json', environments, getApiDir());
 
   res.json({ name: env.name, variableCount: env.variables.length });
 });
@@ -4612,11 +4615,11 @@ app.post('/api/environments/import-postman', (req, res) => {
 // API Client — environments CRUD
 // ---------------------------------------------------------------------------
 app.get('/api/environments', (_req, res) => {
-  res.json(readJsonFile('environments.json', DEFAULT_ENVIRONMENTS));
+  res.json(readJsonFile('environments.json', DEFAULT_ENVIRONMENTS, getApiDir()));
 });
 
 app.put('/api/environments', (req, res) => {
-  writeJsonFile('environments.json', req.body);
+  writeJsonFile('environments.json', req.body, getApiDir());
   res.json({ ok: true });
 });
 
@@ -5593,6 +5596,7 @@ httpServer.listen(PORT, () => {
   console.log(`  http://localhost:${PORT}\n`);
   console.log(`  Base dir: ${BASE_DIR}`);
   console.log(`  Data dir: ${getDataDir()}`);
+  console.log(`  API dir:  ${getApiDir()}`);
   console.log(`  Private dir: ${getPrivateDataDir()}`);
   console.log(`  Docs dir: ${getDocsDir()}`);
   console.log(`  Platform: ${process.platform}`);
