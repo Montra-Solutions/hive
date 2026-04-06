@@ -767,7 +767,12 @@ function writeJsonFile(filename, data, dir = getDataDir()) {
   writeFileSync(join(dir, filename), JSON.stringify(data, null, 2), 'utf-8');
 }
 
-const DEFAULT_ENVIRONMENTS = [];
+const DEFAULT_ENVIRONMENTS = [
+  { name: 'Local', variables: [
+    { key: 'baseUrl', value: 'http://localhost:3000', enabled: true },
+    { key: 'apiKey', value: '', enabled: false },
+  ]},
+];
 
 // ---------------------------------------------------------------------------
 // Data migration: fix auth "none" → "inherit" for imported Postman collections
@@ -4615,7 +4620,13 @@ app.post('/api/environments/import-postman', (req, res) => {
 // API Client — environments CRUD
 // ---------------------------------------------------------------------------
 app.get('/api/environments', (_req, res) => {
-  res.json(readJsonFile('environments.json', DEFAULT_ENVIRONMENTS, getApiDir()));
+  let envs = readJsonFile('environments.json', DEFAULT_ENVIRONMENTS, getApiDir());
+  // Seed on first run (file exists but is empty)
+  if (envs.length === 0 && DEFAULT_ENVIRONMENTS.length > 0) {
+    envs = DEFAULT_ENVIRONMENTS;
+    writeJsonFile('environments.json', envs, getApiDir());
+  }
+  res.json(envs);
 });
 
 app.put('/api/environments', (req, res) => {
