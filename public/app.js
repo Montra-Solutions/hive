@@ -568,19 +568,15 @@ function flushLogs() {
 // GridStack Dashboard Initialization
 // ---------------------------------------------------------------------------
 const DEFAULT_LAYOUT = [
-  { id: 'git-status', x: 0, y: 0, w: 6, h: 4 },
-  { id: 'external-services', x: 6, y: 0, w: 4, h: 4 },
-  { id: 'claude-usage', x: 10, y: 0, w: 2, h: 4 },
-  { id: 'ado', x: 0, y: 4, w: 4, h: 6 },
-  { id: 'sentry', x: 4, y: 4, w: 4, h: 6 },
-  { id: 'releases', x: 8, y: 4, w: 4, h: 6 },
-  { id: 'db-migrations', x: 0, y: 10, w: 4, h: 5 },
-  { id: 'env-diff', x: 4, y: 10, w: 4, h: 4 },
-  { id: 'cli-tools', x: 8, y: 10, w: 4, h: 5 },
-  { id: 'github',         x: 0,  y: 15, w: 6, h: 6 },
-  { id: 'commit-history', x: 6,  y: 15, w: 6, h: 7 },
-  { id: 'contributions',  x: 0,  y: 21, w: 8, h: 4 },
-  { id: 'claude-skills', x: 8,  y: 21, w: 4, h: 7 },
+  { id: 'ado',               x: 0, y: 0,  w: 5, h: 5 },
+  { id: 'commit-history',    x: 5, y: 0,  w: 4, h: 5 },
+  { id: 'releases',          x: 9, y: 0,  w: 3, h: 3 },
+  { id: 'claude-usage',      x: 9, y: 3,  w: 3, h: 2 },
+  { id: 'git-status',        x: 4, y: 5,  w: 4, h: 3 },
+  { id: 'sentry',            x: 0, y: 5,  w: 4, h: 5 },
+  { id: 'claude-skills',     x: 8, y: 5,  w: 4, h: 7 },
+  { id: 'contributions',     x: 4, y: 8,  w: 4, h: 5 },
+  { id: 'external-services', x: 0, y: 10, w: 4, h: 3 },
 ];
 
 // ---------------------------------------------------------------------------
