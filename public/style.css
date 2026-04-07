@@ -5605,6 +5605,37 @@ a.af-row:hover .af-text { text-decoration: underline; }
   color: var(--subtext0);
 }
 
+.db-export-wrap {
+  position: relative;
+  display: inline-block;
+}
+.db-export-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: var(--surface0);
+  border: 1px solid var(--surface1);
+  border-radius: 6px;
+  padding: 4px 0;
+  z-index: 100;
+  min-width: 160px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.db-export-menu.open { display: block; }
+.db-export-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 14px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.db-export-menu button:hover { background: var(--surface1); color: var(--blue); }
 .db-btn-export {
   background: var(--surface0) !important;
   color: var(--text) !important;
