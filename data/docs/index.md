@@ -10,7 +10,7 @@ A self-hosted, browser-based developer dashboard. One tab replaces a dozen. Git 
 
 **Key traits:** Zero cloud dependency. Vanilla JS, no framework. Runs as a detached Node.js process that survives Claude session restarts.
 
-[Read the full HIVE documentation →](hive/overview.md)
+[[hive/overview|Read the full HIVE documentation →]]
 
 ---
 
@@ -20,7 +20,7 @@ A Claude Code `--add-dir` package that gives every repo on your machine the same
 
 **Key traits:** Install once, use everywhere. Org-agnostic codebase with local config. Provider-flexible (Azure DevOps or GitHub).
 
-[Read the full Hivemind documentation →](hivemind/overview.md)
+[[hivemind/overview|Read the full Hivemind documentation →]]
 
 ---
 
@@ -30,7 +30,7 @@ A lightweight Node.js app that generates realistic development activity — real
 
 **Key traits:** Single dependency (Express). Five scripted scenarios with correlated events. Browser control panel.
 
-[Read the full Drone documentation →](drone/overview.md)
+[[drone/overview|Read the full Drone documentation →]]
 
 ---
 
@@ -42,7 +42,7 @@ A lightweight Node.js app that generates realistic development activity — real
 | 2 | **Drone** *(optional)* | Clone and `npm start`. Generates demo data for HIVE. |
 | 3 | **Hivemind** | Clone and run setup. Detects existing config, installs skills system-wide. |
 
-[Quick start guide →](getting-started.md)
+[[getting-started|Quick start guide →]]
 
 ---
 
