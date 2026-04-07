@@ -5339,7 +5339,12 @@ io.on('connection', (socket) => {
   socket.on('refresh', (target) => {
     if (target === 'git') pollGitStatus();
     else if (target === 'external') pollExternalStatus();
-    else if (target === 'claude') fetchClaudeUsage();
+    else if (target === 'claude') {
+      // Debounce: skip if fetched within the last 60s (prevents page-reload spam → 429s)
+      const elapsed = Date.now() - (globalThis._lastClaudeUsageFetch || 0);
+      if (elapsed > 60000) fetchClaudeUsage();
+      else if (claudeUsageCache) socket.emit('claude-usage', claudeUsageCache);
+    }
   });
 
   // Phase 5: DB migration socket events
