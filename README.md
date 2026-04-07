@@ -22,8 +22,6 @@
 
 Each repo works independently. All three together is the full experience.
 
-**Just want to kick the tires?** Clone both repos and run one setup command — see the [one-liner setup](#one-liner-setup).
-
 ---
 
 ## What is H.I.V.E.?
