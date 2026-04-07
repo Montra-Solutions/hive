@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server.mjs",
     "serve": "node server.mjs",
-    "setup": "node setup.mjs"
+    "setup": "node setup.mjs",
+    "doctor": "node doctor.mjs"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
@@ -15,6 +16,7 @@
     "express": "^4.21.0",
     "multer": "^2.1.1",
     "pg": "^8.13.0",
-    "socket.io": "^4.8.0"
+    "socket.io": "^4.8.0",
+    "sql.js": "^1.14.1"
   }
 }

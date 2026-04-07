@@ -325,7 +325,15 @@
             <div class="db-results-bar" id="db-results-bar">
               <span class="db-results-info" id="db-results-info">Run a query to see results</span>
               <button class="btn db-btn-addrow" id="db-add-row" style="display:none">+ Add Row</button>
-              <button class="btn db-btn-export" id="db-export" style="display:none">Export CSV</button>
+              <div class="db-export-wrap" id="db-export" style="display:none">
+                <button class="btn db-btn-export" id="db-export-toggle">Export <span style="font-size:10px">&#x25BE;</span></button>
+                <div class="db-export-menu" id="db-export-menu">
+                  <button data-action="csv-file">CSV &#x2192; File</button>
+                  <button data-action="csv-clip">CSV &#x2192; Clipboard</button>
+                  <button data-action="json-file">JSON &#x2192; File</button>
+                  <button data-action="json-clip">JSON &#x2192; Clipboard</button>
+                </div>
+              </div>
             </div>
             <div class="db-results-wrap" id="db-results-wrap">
               <div class="db-results-placeholder">Results will appear here</div>

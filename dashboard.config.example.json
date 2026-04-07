@@ -54,7 +54,7 @@
     "dev":   { "repoDir": "deployments", "path": "dev-settings.env" },
     "prod":  { "repoDir": "deployments", "path": "prod-settings.env" }
   },
-  "docsDir": "docs",
+  "docsDir": "data/docs",
   "docsSkipDirs": [".git", "node_modules", ".obsidian", ".trash"],
   "swaggerUrl": "http://localhost:3000/swagger-json",
   "dbRepo": "my-db",

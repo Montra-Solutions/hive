@@ -1,16 +1,23 @@
 # H.I.V.E.
 ### Hub for Integrated Visualization & Exploration
 
-> A self-hosted developer dashboard that lives in your browser and knows everything about your stack — git status, live logs, external service health, SQL metrics, API collections, and more. Zero cloud. Zero accounts. Just `node server.mjs`.
+> A self-hosted developer dashboard that lives in your browser and knows everything about your stack — git status, live logs, external service health, SQL metrics, API collections, and more. Zero cloud. Zero accounts. Just `npm start`.
+
+![H.I.V.E. Dashboard](img/hive-dashboard.png)
 
 ---
 
 ## TL;DR — Install Order
 
+>[!TIP] 
+>**Just want to kick the tires?** Use the [one-liner setup](#one-liner-setup) to clone H.I.V.E. and Drone and get up and running fast!
+
+**Typical Install**
+
 | Step | Repo | What it does |
 |------|------|---|
 | 1 | **H.I.V.E.** (this repo) | Clone → `./setup.sh` → configures your identity, provider, dashboard, and writes shared config |
-| 2 | **Drone** (optional) | Clone → demo project for exploring H.I.V.E. features |
+| 2 | **Drone** (optional) | Clone → `npm start` — auto-configures HIVE on startup |
 | 3 | **[Hivemind](https://github.com/Montra-Solutions/hivemind)** | Fork → `./setup.sh` → detects existing config, installs Claude Code skills, creates platform CLAUDE.md |
 
 Each repo works independently. All three together is the full experience.
@@ -100,7 +107,7 @@ npm install
 
 ### 2. Run setup
 
-Setup is an interactive CLI that generates all your config files. It walks you through every section and is safe to re-run at any time to update your config.
+Setup is an interactive CLI that generates all your config files. It's safe to re-run at any time to update your config.
 
 **macOS / Linux:**
 ```bash
@@ -112,7 +119,16 @@ Setup is an interactive CLI that generates all your config files. It walks you t
 .\setup.ps1
 ```
 
-You'll be asked for:
+Setup begins by asking you to choose a mode:
+
+| Mode | When to use |
+|---|---|
+| **[1] Full setup** | You have repos, services, and integrations to configure |
+| **[2] Demo mode** | You want to explore H.I.V.E. quickly — pair with Drone for the full experience |
+
+#### Full setup
+
+The full 10-step wizard asks for:
 
 | Section | What it configures |
 |---|---|
@@ -125,6 +141,19 @@ You'll be asked for:
 | **Services** | Your Web and API dev servers (ports, start commands) |
 | **Database Connections** | PostgreSQL connection strings for the DB explorer and SQL widgets |
 
+#### Demo mode
+
+Demo mode skips the full wizard and writes a minimal config in seconds:
+
+- Auto-detects your projects directory (parent of hive)
+- Detects Drone as a sibling and runs `npm install` for both repos
+- Skips identity, provider, services, and database questions
+- Writes a working `dashboard.config.json` immediately
+
+Clone both hive and drone first, then run setup once — see the [one-liner setup](#one-liner-setup).
+
+---
+
 Setup also writes a **shared config** at `~/.config/hivemind/config.md` that Hivemind skills consume — so you only configure identity and provider once.
 
 Everything setup generates is **gitignored** — credentials and local paths never leave your machine.
@@ -132,12 +161,19 @@ Everything setup generates is **gitignored** — credentials and local paths nev
 ### 3. Start the dashboard
 
 ```bash
-node server.mjs
+npm start
 ```
 
 Open **http://localhost:3333** in your browser.
 
-> **Custom port:** `PORT=4000 node server.mjs`
+> **Custom port:**
+> ```bash
+> # bash / zsh
+> PORT=4000 npm start
+>
+> # PowerShell
+> $env:PORT=4000; npm start
+> ```
 
 ---
 
@@ -220,7 +256,7 @@ GITHUB_TOKEN=your-github-token
 SENTRY_AUTH_TOKEN=your-sentry-token
 ```
 
-Or set them in your shell environment before running `node server.mjs`.
+Or set them in your shell environment before running `npm start`.
 
 ---
 
@@ -251,6 +287,71 @@ Saved metrics live in `data/metrics.json` (gitignored). Share query ideas with y
 
 ---
 
+## Demo Mode
+
+Demo mode is the fastest way to see H.I.V.E. in action. It pairs with **Drone**, a companion repo that generates realistic dev activity (git commits, service health, error feeds, work items) so your dashboard looks alive without any real infrastructure.
+
+### One-liner setup
+
+Clone both repos, then run HIVE setup — it detects Drone and installs dependencies for both:
+
+**macOS / Linux:**
+```bash
+git clone https://github.com/Montra-Solutions/hive.git && git clone https://github.com/Montra-Solutions/drone.git && cd hive && ./setup.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/Montra-Solutions/hive.git; git clone https://github.com/Montra-Solutions/drone.git; cd hive; .\setup.ps1
+```
+
+Choose **option [2] Demo mode** when prompted. Setup will:
+1. Write a minimal `dashboard.config.json` with Drone included
+2. Run `npm install` in both hive and drone
+3. Print the exact commands to launch both services
+
+### After setup — launch
+
+Open two terminals from your projects directory:
+
+```bash
+# Terminal 1 — start HIVE
+cd hive
+npm start
+
+# Terminal 2 — start Drone
+cd drone
+npm start
+```
+
+Drone auto-detects HIVE and configures it on startup — injecting mock API tokens and registering all demo services. If HIVE isn't running yet, drone retries every 5 seconds until it connects. Start order doesn't matter.
+
+Open **http://localhost:3333** (dashboard) and **http://localhost:4000** (Drone control panel).
+
+When you're ready for real configuration, re-run setup and choose **Full setup**.
+
+---
+
+## Health Check
+
+Run `npm run doctor` to validate your setup:
+
+```bash
+npm run doctor
+```
+
+This checks:
+- Config file exists and is valid
+- Projects directory exists and repos are found
+- Integration tokens are set (only warns for tokens your config actually uses)
+- Drone and HIVE servers are reachable
+- Database connections are configured
+- Hivemind config and skills are installed
+
+Use it after initial setup or whenever widgets aren't loading as expected.
+
+---
+
 ## Troubleshooting
 
 ### Dashboard won't start — `dashboard.config.json not found`
@@ -259,7 +360,11 @@ Run setup: `./setup.sh` or `.\setup.ps1`. If you just want to explore, the serve
 ### Port already in use
 Another process is on port 3333. Either stop it or start H.I.V.E. on a different port:
 ```bash
-PORT=4000 node server.mjs
+# bash / zsh
+PORT=4000 npm start
+
+# PowerShell
+$env:PORT=4000; npm start
 ```
 
 ### Git status shows wrong repos

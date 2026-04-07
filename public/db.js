@@ -1031,10 +1031,18 @@ function initDatabase() {
   }
 
   // ---------------------------------------------------------------------------
-  // Export CSV
+  // Export (CSV / JSON, File / Clipboard)
   // ---------------------------------------------------------------------------
-  exportBtn.addEventListener('click', () => {
-    if (!lastResult || !lastResult.columns) return;
+  const exportToggle = document.getElementById('db-export-toggle');
+  const exportMenu = document.getElementById('db-export-menu');
+
+  exportToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    exportMenu.classList.toggle('open');
+  });
+  document.addEventListener('click', () => exportMenu.classList.remove('open'));
+
+  function buildCsv() {
     const { columns, rows } = lastResult;
     const csvRows = [columns.map(c => `"${c.replace(/"/g, '""')}"`).join(',')];
     for (const row of rows) {
@@ -1045,13 +1053,49 @@ function initDatabase() {
         return `"${s.replace(/"/g, '""')}"`;
       }).join(','));
     }
-    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    return csvRows.join('\n');
+  }
+
+  function buildJson() {
+    const { columns, rows } = lastResult;
+    const clean = rows.map(row => {
+      const obj = {};
+      for (const c of columns) obj[c] = row[c] ?? null;
+      return obj;
+    });
+    return JSON.stringify(clean, null, 2);
+  }
+
+  function downloadBlob(content, filename, mime) {
+    const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `query-${Date.now()}.csv`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function copyToClipboard(text, label) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(`${label} copied to clipboard`);
+    } catch {
+      showToast('Clipboard write failed', 'error');
+    }
+  }
+
+  exportMenu.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn || !lastResult || !lastResult.columns) return;
+    exportMenu.classList.remove('open');
+    const ts = Date.now();
+    switch (btn.dataset.action) {
+      case 'csv-file':  downloadBlob(buildCsv(), `query-${ts}.csv`, 'text/csv'); break;
+      case 'csv-clip':  copyToClipboard(buildCsv(), 'CSV'); break;
+      case 'json-file': downloadBlob(buildJson(), `query-${ts}.json`, 'application/json'); break;
+      case 'json-clip': copyToClipboard(buildJson(), 'JSON'); break;
+    }
   });
 
   // ---------------------------------------------------------------------------
