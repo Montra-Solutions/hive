@@ -3724,7 +3724,7 @@ app.get('/api/docs/git/status', (_req, res) => {
       }
       return acc;
     }, []) : [];
-    res.json({ branch, dirty: status.length > 0, files: changedPaths.length, changedPaths });
+    res.json({ branch, dirty: changedPaths.length > 0, files: changedPaths.length, changedPaths });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
