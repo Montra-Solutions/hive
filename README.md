@@ -18,7 +18,7 @@
 |------|------|---|
 | 1 | **H.I.V.E.** (this repo) | Clone → `./setup.sh` → configures your identity, provider, dashboard, and writes shared config |
 | 2 | **Drone** (optional) | Clone → `npm start` — auto-configures HIVE on startup |
-| 3 | **[Hivemind](https://github.com/Montra-Solutions/hivemind)** | Fork → `./setup.sh` → detects existing config, installs Claude Code skills, creates platform CLAUDE.md |
+| 3 | **[Hivemind](https://github.com/Montra-Solutions/hivemind)** | Fork (import) → `./setup.sh` → detects existing config, installs Claude Code skills, creates platform CLAUDE.md |
 
 Each repo works independently. All three together is the full experience.
 
