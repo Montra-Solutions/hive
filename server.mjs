@@ -1144,17 +1144,19 @@ app.get('/api/repos/:repo/search', async (req, res) => {
   if (include) include.split(',').map(p => p.trim()).filter(Boolean).forEach(p => ignoreArgs.push('-g', p));
   if (exclude) exclude.split(',').map(p => p.trim()).filter(Boolean).forEach(p => ignoreArgs.push('-g', `!${p}`));
 
-  // Try ripgrep first, fall back to grep
+  // Try ripgrep first, fall back to git grep (works cross-platform)
   const tryRg = () => execFileAsync('rg', [
     '--json', '-i', '--max-count', '3', '--max-filesize', '1M',
     ...ignoreArgs, q, base
   ], { maxBuffer: 4 * 1024 * 1024 });
 
-  const tryGrep = () => execFileAsync('grep', [
-    '-r', '-i', '-n', '--include=*.*', '-l',
-    '--exclude-dir=node_modules', '--exclude-dir=.git',
-    q, base
-  ], { maxBuffer: 2 * 1024 * 1024 });
+  const tryGitGrep = () => execFileAsync('git', [
+    'grep', '--line-number', '--color=never', '-i',
+    '-e', q,
+    '--', '.',
+    ':(exclude)node_modules', ':(exclude)dist', ':(exclude)build',
+    ':(exclude)coverage',
+  ], { cwd: base, maxBuffer: 2 * 1024 * 1024 });
 
   try {
     let results = [];
@@ -1181,15 +1183,29 @@ app.get('/api/repos/:repo/search', async (req, res) => {
       }
       results = [...matches.values()].slice(0, 50);
     } catch (rgErr) {
-      // ripgrep not available — fall back to grep file list only
+      // ripgrep not available — fall back to git grep
       try {
-        const { stdout } = await tryGrep();
-        results = stdout.split('\n').filter(Boolean).slice(0, 50).map(f => ({
-          path: normalize(f).replace(normalize(base) + sep, '').replace(/\\/g, '/'),
-          matches: [],
-        }));
+        const { stdout } = await tryGitGrep();
+        const matches = new Map();
+        for (const line of stdout.split('\n').filter(Boolean)) {
+          if (results.length >= 50) break;
+          const firstColon = line.indexOf(':');
+          if (firstColon === -1) continue;
+          const secondColon = line.indexOf(':', firstColon + 1);
+          if (secondColon === -1) continue;
+          const filePath = line.slice(0, firstColon).replace(/\\/g, '/');
+          const lineNum = parseInt(line.slice(firstColon + 1, secondColon), 10);
+          const text = line.slice(secondColon + 1).trimEnd();
+          if (!filePath || isNaN(lineNum)) continue;
+          if (!matches.has(filePath)) matches.set(filePath, { path: filePath, matches: [] });
+          const entry = matches.get(filePath);
+          if (entry.matches.length < 3) {
+            entry.matches.push({ line: lineNum, text });
+          }
+        }
+        results = [...matches.values()].slice(0, 50);
       } catch {
-        // grep also failed (no matches returns exit 1) — empty results is fine
+        // git grep also failed (no matches returns exit 1) — empty results is fine
       }
     }
 
