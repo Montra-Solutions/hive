@@ -567,6 +567,37 @@
   </div>
 
   <!-- Collection/Folder Editor Modal -->
+  <!-- OpenAPI Import Modal -->
+  <div class="api-modal-overlay" id="api-openapi-modal" style="display:none">
+    <div class="api-modal" style="min-width:550px">
+      <div class="api-modal-header">
+        <h3>Import from OpenAPI / Swagger</h3>
+        <button class="api-modal-close" id="api-openapi-modal-close">&times;</button>
+      </div>
+      <div style="padding:16px">
+        <p style="font-size:12px;color:var(--subtext0);margin-bottom:12px">
+          Enter a spec URL (e.g. <code>https://petstore3.swagger.io/api/v3/openapi.json</code>), paste JSON or YAML directly, or drag &amp; drop a file.
+        </p>
+        <label style="display:block;font-size:11px;color:var(--subtext0);margin-bottom:4px">Spec URL</label>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          <input type="text" id="api-openapi-url" class="api-save-input" style="flex:1" placeholder="https://example.com/openapi.json" />
+          <button class="btn" id="api-openapi-fetch">Fetch</button>
+        </div>
+        <label style="display:block;font-size:11px;color:var(--subtext0);margin-bottom:4px">Or paste JSON / YAML</label>
+        <textarea id="api-openapi-json" class="api-body-textarea" style="min-height:180px;max-height:360px" placeholder='openapi: 3.0.0&#10;info:&#10;  title: My API&#10;paths: { ... }'></textarea>
+        <div id="api-openapi-drop-zone" style="border:2px dashed var(--surface1);border-radius:6px;padding:16px;text-align:center;color:var(--overlay0);font-size:12px;margin-top:8px;cursor:pointer;transition:border-color 0.15s">
+          Drop .json / .yaml / .yml file here or click to browse
+          <input type="file" id="api-openapi-file" accept=".json,.yaml,.yml" style="display:none" />
+        </div>
+        <div id="api-openapi-error" style="color:var(--red);font-size:11px;margin-top:8px;display:none"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button class="btn api-btn-send" id="api-openapi-import">Import</button>
+          <button class="btn" id="api-openapi-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="api-modal-overlay" id="api-coll-editor-modal" style="display:none">
     <div class="api-modal api-coll-editor">
       <div class="api-modal-header">

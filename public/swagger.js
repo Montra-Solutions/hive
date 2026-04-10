@@ -179,6 +179,33 @@ function initSwagger() {
     }
   });
 
+  // OpenAPI import modal
+  document.getElementById('api-openapi-modal-close').addEventListener('click', closeOpenApiModal);
+  document.getElementById('api-openapi-cancel').addEventListener('click', closeOpenApiModal);
+  document.getElementById('api-openapi-modal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeOpenApiModal();
+  });
+  document.getElementById('api-openapi-fetch').addEventListener('click', fetchOpenApiFromUrl);
+  document.getElementById('api-openapi-url').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); fetchOpenApiFromUrl(); }
+  });
+  document.getElementById('api-openapi-import').addEventListener('click', doOpenApiImport);
+
+  const oapiDrop = document.getElementById('api-openapi-drop-zone');
+  const oapiFile = document.getElementById('api-openapi-file');
+  oapiDrop.addEventListener('click', () => oapiFile.click());
+  oapiDrop.addEventListener('dragover', (e) => { e.preventDefault(); oapiDrop.style.borderColor = 'var(--blue)'; });
+  oapiDrop.addEventListener('dragleave', () => { oapiDrop.style.borderColor = 'var(--surface1)'; });
+  oapiDrop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    oapiDrop.style.borderColor = 'var(--surface1)';
+    const file = Array.from(e.dataTransfer.files).find(f => /\.(json|ya?ml)$/i.test(f.name));
+    if (file) readOpenApiFile(file);
+  });
+  oapiFile.addEventListener('change', () => {
+    if (oapiFile.files[0]) readOpenApiFile(oapiFile.files[0]);
+  });
+
   // Collections filter
   document.getElementById('api-collections-filter').addEventListener('input', () => renderCollectionsTree());
 
@@ -4169,14 +4196,155 @@ async function doPostmanEnvImport() {
 // ---------------------------------------------------------------------------
 // Import from OpenAPI
 // ---------------------------------------------------------------------------
-async function importFromOpenAPI() {
-  if (!swaggerSpec) {
-    await loadSwaggerSpec();
-    if (!swaggerSpec) return alert('Could not load OpenAPI spec. Is the API running?');
-  }
-  importAllAsCollection();
+function importFromOpenAPI() {
+  openOpenApiModal();
 }
 
+function openOpenApiModal() {
+  document.getElementById('api-openapi-modal').style.display = '';
+  document.getElementById('api-openapi-url').value = '';
+  document.getElementById('api-openapi-json').value = '';
+  document.getElementById('api-openapi-file').value = '';
+  const errorEl = document.getElementById('api-openapi-error');
+  errorEl.style.display = 'none';
+  errorEl.textContent = '';
+}
+
+function closeOpenApiModal() {
+  document.getElementById('api-openapi-modal').style.display = 'none';
+}
+
+function readOpenApiFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('api-openapi-json').value = e.target.result;
+  };
+  reader.readAsText(file);
+}
+
+// Reads an Express JSON response safely. If the server is stale and returns
+// HTML (e.g. the default 404 page), give the user an actionable message instead
+// of a cryptic "Unexpected token '<'" from JSON.parse.
+async function readJsonResponse(res) {
+  const text = await res.text();
+  const ctype = res.headers.get('content-type') || '';
+  if (!ctype.includes('application/json')) {
+    if (res.status === 404 || /<!doctype|<html/i.test(text)) {
+      throw new Error('Hive server does not recognize this route — restart the Hive server to pick up new endpoints.');
+    }
+    throw new Error(`Unexpected ${ctype || 'response'} (status ${res.status})`);
+  }
+  try { return JSON.parse(text); }
+  catch { throw new Error('Server returned malformed JSON'); }
+}
+
+async function fetchOpenApiFromUrl() {
+  const url = document.getElementById('api-openapi-url').value.trim();
+  const errorEl = document.getElementById('api-openapi-error');
+  errorEl.style.display = 'none';
+  if (!url) {
+    errorEl.textContent = 'Enter a URL to fetch.';
+    errorEl.style.display = '';
+    return;
+  }
+  const btn = document.getElementById('api-openapi-fetch');
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Fetching...';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/openapi/fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const data = await readJsonResponse(res);
+    if (!res.ok || data.error) {
+      errorEl.textContent = 'Fetch failed: ' + (data.error || res.status);
+      errorEl.style.display = '';
+      return;
+    }
+    document.getElementById('api-openapi-json').value = JSON.stringify(data, null, 2);
+  } catch (err) {
+    errorEl.textContent = 'Fetch failed: ' + err.message;
+    errorEl.style.display = '';
+  } finally {
+    btn.textContent = originalLabel;
+    btn.disabled = false;
+  }
+}
+
+async function doOpenApiImport() {
+  const text = document.getElementById('api-openapi-json').value.trim();
+  const errorEl = document.getElementById('api-openapi-error');
+  errorEl.style.display = 'none';
+
+  if (!text) {
+    errorEl.textContent = 'Paste a spec, fetch from a URL, or drop a file first.';
+    errorEl.style.display = '';
+    return;
+  }
+
+  // Try to parse client-side first (fast path for JSON). On failure, fall back
+  // to the server's parser, which also accepts YAML.
+  let spec;
+  try { spec = JSON.parse(text); }
+  catch {
+    try {
+      const res = await fetch('/api/openapi/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const data = await readJsonResponse(res);
+      if (!res.ok || data.error) {
+        errorEl.textContent = 'Parse failed: ' + (data.error || res.status);
+        errorEl.style.display = '';
+        return;
+      }
+      spec = data;
+    } catch (err) {
+      errorEl.textContent = 'Parse failed: ' + err.message;
+      errorEl.style.display = '';
+      return;
+    }
+  }
+
+  if (!spec || !spec.paths) {
+    errorEl.textContent = 'This does not look like an OpenAPI spec — missing "paths".';
+    errorEl.style.display = '';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/collections/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(spec),
+    });
+    const coll = await readJsonResponse(res);
+    if (coll.error) {
+      errorEl.textContent = 'Import failed: ' + coll.error;
+      errorEl.style.display = '';
+      return;
+    }
+    // Cache the imported spec as the active spec so the Docs tab and Browse
+    // API panel can resolve endpoint docs from it, not just from the
+    // configured API service.
+    swaggerSpec = spec;
+    try { renderBrowseList(); } catch { /* Browse tab may not be visible */ }
+    try { renderDocsPanel(); } catch { /* Docs tab may not be open */ }
+
+    closeOpenApiModal();
+    await loadCollections();
+    alert(`Imported "${coll.name}" with ${(coll.folders || []).length} folders`);
+  } catch (err) {
+    errorEl.textContent = 'Import failed: ' + err.message;
+    errorEl.style.display = '';
+  }
+}
+
+// Used by the "Import All" button on the Browse API tab — imports whatever
+// spec is currently loaded from the configured API service.
 async function importAllAsCollection() {
   if (!swaggerSpec) {
     await loadSwaggerSpec();
@@ -4192,7 +4360,6 @@ async function importAllAsCollection() {
     const coll = await res.json();
     if (coll.error) return alert('Import failed: ' + coll.error);
 
-    // Reload collections
     await loadCollections();
     alert(`Imported "${coll.name}" with ${(coll.folders || []).length} folders`);
   } catch (err) {

@@ -14,6 +14,7 @@ import pg from 'pg';
 import { Server as SocketIO } from 'socket.io';
 import AdmZip from 'adm-zip';
 import multer from 'multer';
+import yaml from 'js-yaml';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -4342,6 +4343,56 @@ app.put('/api/collections', (req, res) => {
   const cleaned = (Array.isArray(req.body) ? req.body : []).map(({ _source, ...rest }) => rest);
   writeJsonFile('collections.json', cleaned, target);
   res.json({ ok: true });
+});
+
+// Parse an OpenAPI spec from a string (JSON or YAML). Returns the normalized
+// spec object, which the caller can then POST to /api/collections/import.
+function parseOpenApiText(text) {
+  if (!text || typeof text !== 'string') throw new Error('Empty document');
+  const trimmed = text.trim();
+  // Try JSON first — cheaper and gives better errors when the input is JSON.
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try { return JSON.parse(trimmed); }
+    catch (e) { throw new Error('Invalid JSON: ' + e.message); }
+  }
+  // Otherwise assume YAML. js-yaml also accepts JSON, so this is a safe fallback.
+  try { return yaml.load(trimmed); }
+  catch (e) { throw new Error('Invalid YAML: ' + e.message); }
+}
+
+// Fetch an OpenAPI spec from an arbitrary URL (server-side proxy to avoid CORS).
+app.post('/api/openapi/fetch', async (req, res) => {
+  const { url } = req.body || {};
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url' });
+  let parsed;
+  try { parsed = new URL(url); } catch { return res.status(400).json({ error: 'Invalid URL' }); }
+  if (!/^https?:$/.test(parsed.protocol)) return res.status(400).json({ error: 'Only http(s) URLs allowed' });
+
+  try {
+    const response = await fetch(parsed.toString(), {
+      headers: { 'Accept': 'application/json, application/yaml, text/yaml, */*' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) return res.status(502).json({ error: `Upstream returned ${response.status}` });
+    const text = await response.text();
+    let spec;
+    try { spec = parseOpenApiText(text); }
+    catch (e) { return res.status(400).json({ error: e.message }); }
+    if (!spec || !spec.paths) return res.status(400).json({ error: 'Fetched document is not a valid OpenAPI spec (missing "paths")' });
+    res.json(spec);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Parse pasted spec text (JSON or YAML) and return the normalized spec object.
+app.post('/api/openapi/parse', (req, res) => {
+  const { text } = req.body || {};
+  let spec;
+  try { spec = parseOpenApiText(text); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
+  if (!spec || !spec.paths) return res.status(400).json({ error: 'Document is not a valid OpenAPI spec (missing "paths")' });
+  res.json(spec);
 });
 
 app.post('/api/collections/import', (req, res) => {
