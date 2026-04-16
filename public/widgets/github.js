@@ -62,24 +62,8 @@ WIDGET_REGISTRY['github'] = {
     const activity = this._cachedActivity;
     let html = '';
 
-    // Repo activity
-    if (activity.length) {
-      html += `<div class="section-title" style="margin-top:0">Recent Activity</div>`;
-      html += `<div class="github-activity-list">`;
-      for (const r of activity) {
-        const repoShort = r.repo.split('/').pop();
-        const when = r.pushedAt ? `Last push ${_ghTimeAgo(r.pushedAt)}` : 'No push data';
-        html += `<div class="github-activity-item">
-          <span class="github-activity-repo">${esc(repoShort)}</span>
-          <span class="github-activity-branch">${esc(r.defaultBranch || 'main')}</span>
-          <span class="github-activity-time">${esc(when)}</span>
-        </div>`;
-      }
-      html += `</div>`;
-    }
-
     // PRs
-    html += `<div class="section-title">Open PRs</div>`;
+    html += `<div class="section-title" style="margin-top:0">Open PRs</div>`;
     if (!prs.length) {
       html += `<div class="github-empty">No open PRs</div>`;
     } else {
@@ -91,6 +75,22 @@ WIDGET_REGISTRY['github'] = {
           <span class="github-pr-repo">${esc(repoShort)}</span>
           <span class="github-pr-title"><a href="${esc(pr.url)}" target="_blank">${esc(pr.title)}</a>${draft}</span>
           <span class="github-pr-meta">${esc(pr.author)} · updated ${_ghTimeAgo(pr.updatedAt)}</span>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+
+    // Repo activity
+    if (activity.length) {
+      html += `<div class="section-title">Recent Activity</div>`;
+      html += `<div class="github-activity-list">`;
+      for (const r of activity) {
+        const repoShort = r.repo.split('/').pop();
+        const when = r.pushedAt ? `Last push ${_ghTimeAgo(r.pushedAt)}` : 'No push data';
+        html += `<div class="github-activity-item">
+          <span class="github-activity-repo">${esc(repoShort)}</span>
+          <span class="github-activity-branch">${esc(r.defaultBranch || 'main')}</span>
+          <span class="github-activity-time">${esc(when)}</span>
         </div>`;
       }
       html += `</div>`;

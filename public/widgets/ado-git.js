@@ -59,23 +59,8 @@ WIDGET_REGISTRY['ado-git'] = {
     const DASH = window.DASH_CONFIG || {};
     let html = '';
 
-    // Recent Activity
-    if (activity.length) {
-      html += `<div class="section-title" style="margin-top:0">Recent Activity</div>`;
-      html += `<div class="github-activity-list">`;
-      for (const r of activity) {
-        const when = r.pushedAt ? `Last push ${_adoTimeAgo(r.pushedAt)}` : 'No push data';
-        html += `<div class="github-activity-item">
-          <span class="github-activity-repo">${esc(r.repo)}</span>
-          <span class="github-activity-branch">${esc(r.defaultBranch || 'main')}</span>
-          <span class="github-activity-time">${esc(when)}</span>
-        </div>`;
-      }
-      html += `</div>`;
-    }
-
     // Active PRs
-    html += `<div class="section-title">Open PRs</div>`;
+    html += `<div class="section-title" style="margin-top:0">Open PRs</div>`;
     if (!prs.length) {
       html += `<div class="github-empty">No active PRs</div>`;
     } else {
@@ -86,6 +71,21 @@ WIDGET_REGISTRY['ado-git'] = {
           <span class="ado-pr-repo">${esc(pr.repo)}</span>
           <span class="ado-pr-title"><a href="${esc(pr.url)}" target="_blank">${esc(pr.title)}</a></span>
           <span class="ado-pr-meta">${esc(meta)}</span>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+
+    // Recent Activity
+    if (activity.length) {
+      html += `<div class="section-title">Recent Activity</div>`;
+      html += `<div class="github-activity-list">`;
+      for (const r of activity) {
+        const when = r.pushedAt ? `Last push ${_adoTimeAgo(r.pushedAt)}` : 'No push data';
+        html += `<div class="github-activity-item">
+          <span class="github-activity-repo">${esc(r.repo)}</span>
+          <span class="github-activity-branch">${esc(r.defaultBranch || 'main')}</span>
+          <span class="github-activity-time">${esc(when)}</span>
         </div>`;
       }
       html += `</div>`;
