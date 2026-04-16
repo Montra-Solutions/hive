@@ -1378,6 +1378,29 @@ function initSidebarResizer() {
 // ---------------------------------------------------------------------------
 // Streaming proxy reader — consumes SSE from /api/proxy when response is NDJSON
 // ---------------------------------------------------------------------------
+// Prompt the user to add a host to the proxy allowlist. Returns true if approved.
+async function maybeApproveProxyHost(host) {
+  if (!host) return false;
+  const ok = window.confirm(`The API client wants to proxy a request to:\n\n  ${host}\n\nThis host is not in your allowlist. Approve it?`);
+  if (!ok) return false;
+  try {
+    const r = await fetch('/api/proxy/allowlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: 'unknown' }));
+      alert(`Could not add host: ${err.error || r.statusText}`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    alert(`Could not reach the dashboard server: ${err.message}`);
+    return false;
+  }
+}
+
 async function readStreamingProxy(proxyRes) {
   const reader = proxyRes.body.getReader();
   const decoder = new TextDecoder();
@@ -1583,22 +1606,30 @@ async function sendRequest() {
           fd.append(row.key, resolveVariables(row.value || ''));
         }
       }
-      const proxyRes = await fetch('/api/proxy/upload', { method: 'POST', body: fd });
-      response = await proxyRes.json();
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const proxyRes = await fetch('/api/proxy/upload', { method: 'POST', body: fd });
+        response = await proxyRes.json();
+        if (response?.needsApproval && attempt === 0 && await maybeApproveProxyHost(response.host)) continue;
+        break;
+      }
     } else {
       const reqTimeout = parseInt(document.getElementById('api-timeout').value) || 600000;
-      const proxyRes = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method, url, headers: resolvedHeaders, body: reqBody, timeout: reqTimeout, stream: true }),
-      });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const proxyRes = await fetch('/api/proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ method, url, headers: resolvedHeaders, body: reqBody, timeout: reqTimeout, stream: true }),
+        });
 
-      const proxyContentType = proxyRes.headers.get('content-type') || '';
-      if (proxyContentType.includes('text/event-stream')) {
-        // Streaming NDJSON — read SSE events incrementally
-        response = await readStreamingProxy(proxyRes);
-      } else {
-        response = await proxyRes.json();
+        const proxyContentType = proxyRes.headers.get('content-type') || '';
+        if (proxyContentType.includes('text/event-stream')) {
+          // Streaming NDJSON — read SSE events incrementally
+          response = await readStreamingProxy(proxyRes);
+        } else {
+          response = await proxyRes.json();
+        }
+        if (response?.needsApproval && attempt === 0 && await maybeApproveProxyHost(response.host)) continue;
+        break;
       }
     }
     currentResponse = response;

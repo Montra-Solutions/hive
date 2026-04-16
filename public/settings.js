@@ -202,6 +202,13 @@ const SETTINGS_SECTIONS = [
     ],
   },
   {
+    key: 'proxyAllowlist',
+    title: 'API Proxy Allowlist',
+    icon: '\uD83D\uDD12',
+    description: 'Hosts the API Client is allowed to proxy requests to. The Swagger tab will prompt you to approve new hosts on first use.',
+    type: 'custom-proxy-allowlist',
+  },
+  {
     key: 'envDiff',
     title: 'Env Diff',
     icon: '\uD83D\uDD0D',
@@ -299,10 +306,77 @@ function renderSettings(container) {
     if (statusEl) { statusEl.textContent = 'Unsaved changes'; statusEl.className = 'settings-status dirty'; }
   }
   initRepoVisibility(container);
+  initProxyAllowlist(container);
+}
+
+async function initProxyAllowlist(container) {
+  const mount = container.querySelector('.settings-proxy-allowlist');
+  if (!mount) return;
+  async function render() {
+    try {
+      const r = await fetch('/api/proxy/allowlist');
+      const { hosts = [] } = await r.json();
+      let html = '';
+      if (hosts.length === 0) {
+        html += `<div class="settings-help">No hosts approved yet. The API Client will prompt you to approve new hosts as they're used.</div>`;
+      } else {
+        html += `<ul class="settings-proxy-list">`;
+        for (const h of hosts) {
+          html += `<li><code>${_esc(h)}</code><button class="btn btn-small" data-proxy-remove="${_esc(h)}">Remove</button></li>`;
+        }
+        html += `</ul>`;
+      }
+      html += `<div class="settings-proxy-add">`;
+      html += `<input type="text" class="settings-input" id="settings-proxy-add-input" placeholder="host or host:port (e.g. api.example.com)">`;
+      html += `<button class="btn" id="settings-proxy-add-btn">Add</button>`;
+      html += `<span class="settings-proxy-error" id="settings-proxy-error"></span>`;
+      html += `</div>`;
+      mount.innerHTML = html;
+      mount.querySelectorAll('[data-proxy-remove]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await fetch(`/api/proxy/allowlist/${encodeURIComponent(btn.dataset.proxyRemove)}`, { method: 'DELETE' });
+          render();
+        });
+      });
+      const addBtn = mount.querySelector('#settings-proxy-add-btn');
+      const addInput = mount.querySelector('#settings-proxy-add-input');
+      const errEl = mount.querySelector('#settings-proxy-error');
+      async function submitAdd() {
+        const host = (addInput.value || '').trim();
+        if (!host) return;
+        errEl.textContent = '';
+        const r = await fetch('/api/proxy/allowlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ host }),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          errEl.textContent = err.error || 'Could not add host';
+          return;
+        }
+        addInput.value = '';
+        render();
+      }
+      addBtn.addEventListener('click', submitAdd);
+      addInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitAdd(); });
+    } catch (err) {
+      mount.innerHTML = `<span class="panel-loading">Error: ${_esc(err.message)}</span>`;
+    }
+  }
+  render();
 }
 
 function renderSectionBody(section) {
   let html = '';
+
+  // Custom section: proxy allowlist (managed in user-prefs, not dashboard.config.json)
+  if (section.type === 'custom-proxy-allowlist') {
+    html += `<div class="settings-proxy-allowlist" data-section="proxyAllowlist">`;
+    html += `<div class="panel-loading">Loading allowlist...</div>`;
+    html += `</div>`;
+    return html;
+  }
 
   // Environment variables (tokens/secrets stored in .env, not config)
   if (section.envVars) {

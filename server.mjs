@@ -3,7 +3,7 @@ import { createConnection as netConnect } from 'node:net';
 import { execSync, execFileSync } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import { createReadStream } from 'node:fs';
-import { join, dirname, relative, normalize, sep, isAbsolute } from 'node:path';
+import { join, dirname, relative, normalize, sep, isAbsolute, resolve as resolvePath } from 'node:path';
 import { homedir, userInfo } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, readdirSync, statSync, lstatSync, readlinkSync, mkdirSync, writeFileSync, copyFileSync, watch, unlinkSync, renameSync, rmdirSync } from 'node:fs';
@@ -33,7 +33,15 @@ if (!existsSync(CONFIG_PATH)) {
   }
 }
 const _configRaw = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '').trim();
-let CONFIG = _configRaw ? JSON.parse(_configRaw) : {};
+let CONFIG = {};
+if (_configRaw) {
+  try {
+    CONFIG = JSON.parse(_configRaw);
+  } catch (err) {
+    console.error(`ERROR: dashboard.config.json is not valid JSON — ${err.message}`);
+    process.exit(1);
+  }
+}
 
 // Load .env from repo root
 dotenv.config({ path: join(__dirname, '.env') });
@@ -68,6 +76,23 @@ function resolveBasePath() {
 }
 
 const BASE_DIR = resolveBasePath();
+
+// ---------------------------------------------------------------------------
+// Path safety — confines file read/write endpoints to approved roots so a
+// user-supplied path can't escape into system files.
+// ---------------------------------------------------------------------------
+const ALLOWED_EDIT_ROOTS = [
+  resolvePath(homedir()),
+  resolvePath(BASE_DIR),
+];
+function isPathWithinRoot(p, root) {
+  const rel = relative(root, p);
+  return !!rel && !rel.startsWith('..') && !isAbsolute(rel);
+}
+function isSafeEditPath(p) {
+  const abs = resolvePath(p);
+  return ALLOWED_EDIT_ROOTS.some(root => abs === root || isPathWithinRoot(abs, root));
+}
 
 // ---------------------------------------------------------------------------
 // Repo list — from config
@@ -2638,8 +2663,8 @@ app.get('/api/claude/skills', (req, res) => {
 app.get('/api/claude/skill', (req, res) => {
   try {
     const skillPath = Buffer.from(req.query.p || '', 'base64').toString('utf-8');
-    const mdPath = join(skillPath, 'SKILL.md');
-    if (!mdPath.includes('.claude') && !mdPath.includes('skills')) {
+    const mdPath = resolvePath(join(skillPath, 'SKILL.md'));
+    if (!isSafeEditPath(mdPath) || !mdPath.endsWith(`${sep}SKILL.md`)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     if (!existsSync(mdPath)) return res.status(404).json({ error: 'Not found' });
@@ -2653,8 +2678,8 @@ app.get('/api/claude/skill', (req, res) => {
 app.put('/api/claude/skill', express.json({ limit: '500kb' }), (req, res) => {
   try {
     const skillPath = Buffer.from(req.body?.p || '', 'base64').toString('utf-8');
-    const mdPath = join(skillPath, 'SKILL.md');
-    if (!mdPath.includes('.claude') && !mdPath.includes('skills')) {
+    const mdPath = resolvePath(join(skillPath, 'SKILL.md'));
+    if (!isSafeEditPath(mdPath) || !mdPath.endsWith(`${sep}SKILL.md`)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     if (!existsSync(skillPath)) return res.status(404).json({ error: 'Skill directory not found' });
@@ -2668,8 +2693,10 @@ app.put('/api/claude/skill', express.json({ limit: '500kb' }), (req, res) => {
 // Read/write a CLAUDE.md file by its full path (base64-encoded)
 app.get('/api/claude/claudemd', (req, res) => {
   try {
-    const filePath = Buffer.from(req.query.p || '', 'base64').toString('utf-8');
-    if (!filePath.endsWith('CLAUDE.md')) return res.status(403).json({ error: 'Forbidden' });
+    const filePath = resolvePath(Buffer.from(req.query.p || '', 'base64').toString('utf-8'));
+    if (!isSafeEditPath(filePath) || !filePath.endsWith(`${sep}CLAUDE.md`)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     if (!existsSync(filePath)) {
       return res.json({ content: '', path: filePath, exists: false });
     }
@@ -2681,8 +2708,10 @@ app.get('/api/claude/claudemd', (req, res) => {
 
 app.put('/api/claude/claudemd', express.json({ limit: '2mb' }), (req, res) => {
   try {
-    const filePath = Buffer.from(req.body?.p || '', 'base64').toString('utf-8');
-    if (!filePath.endsWith('CLAUDE.md')) return res.status(403).json({ error: 'Forbidden' });
+    const filePath = resolvePath(Buffer.from(req.body?.p || '', 'base64').toString('utf-8'));
+    if (!isSafeEditPath(filePath) || !filePath.endsWith(`${sep}CLAUDE.md`)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(filePath, req.body.content, 'utf-8');
     res.json({ ok: true });
@@ -3394,10 +3423,19 @@ function getUserPrefsPath() { return join(getPrivateDataDir(), 'user-prefs.json'
 
 function readUserPrefs() {
   const path = getUserPrefsPath();
-  if (existsSync(path)) return JSON.parse(readFileSync(path, 'utf-8'));
+  const safeParse = (filePath) => {
+    try {
+      return JSON.parse(readFileSync(filePath, 'utf-8'));
+    } catch (err) {
+      console.warn(`[user-prefs] ignoring corrupt ${filePath}: ${err.message}`);
+      return null;
+    }
+  };
+  if (existsSync(path)) return safeParse(path) || {};
   // Migrate from legacy location on first access
   if (existsSync(USER_PREFS_LEGACY_PATH)) {
-    const data = JSON.parse(readFileSync(USER_PREFS_LEGACY_PATH, 'utf-8'));
+    const data = safeParse(USER_PREFS_LEGACY_PATH);
+    if (!data) return {};
     const dir = dirname(path);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(path, JSON.stringify(data, null, 2));
@@ -3750,11 +3788,73 @@ app.get('/api/docs/git/status', (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// API Client — proxy allowlist
+// Targets must be approved before the proxy will hit them. List is stored in
+// user-prefs (per-machine). When an unknown host is seen, the proxy returns
+// `needsApproval: true` so the frontend can prompt the user to allow it.
+// Only http/https URLs are permitted — file://, data://, etc. are always rejected.
+// ---------------------------------------------------------------------------
+function getProxyAllowlist() {
+  const prefs = readUserPrefs();
+  return Array.isArray(prefs.proxyAllowlist) ? prefs.proxyAllowlist : [];
+}
+function saveProxyAllowlist(list) {
+  const prefs = readUserPrefs();
+  prefs.proxyAllowlist = [...new Set(list.map(h => String(h).trim().toLowerCase()).filter(Boolean))].sort();
+  const path = getUserPrefsPath();
+  const dir = dirname(path);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(path, JSON.stringify(prefs, null, 2));
+  return prefs.proxyAllowlist;
+}
+// Returns { ok: true, host } when target is allowed, or
+// { ok: false, reason, host? } with 'protocol' | 'parse' | 'unapproved'.
+function checkProxyTarget(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { return { ok: false, reason: 'parse' }; }
+  if (!/^https?:$/.test(parsed.protocol)) return { ok: false, reason: 'protocol', host: parsed.protocol };
+  const host = (parsed.host || parsed.hostname || '').toLowerCase();
+  if (!host) return { ok: false, reason: 'parse' };
+  const list = getProxyAllowlist();
+  // Match exact host[:port] or bare hostname when port is default
+  const bare = parsed.hostname.toLowerCase();
+  if (list.includes(host) || list.includes(bare)) return { ok: true, host };
+  return { ok: false, reason: 'unapproved', host };
+}
+
+app.get('/api/proxy/allowlist', (_req, res) => {
+  res.json({ hosts: getProxyAllowlist() });
+});
+app.post('/api/proxy/allowlist', express.json({ limit: '10kb' }), (req, res) => {
+  const host = String(req.body?.host || '').trim().toLowerCase();
+  if (!host || !/^[a-z0-9][a-z0-9.\-]*(?::\d{1,5})?$/.test(host)) {
+    return res.status(400).json({ error: 'Invalid host' });
+  }
+  const list = getProxyAllowlist();
+  if (!list.includes(host)) list.push(host);
+  res.json({ hosts: saveProxyAllowlist(list) });
+});
+app.delete('/api/proxy/allowlist/:host', (req, res) => {
+  const host = String(req.params.host || '').trim().toLowerCase();
+  const list = getProxyAllowlist().filter(h => h !== host);
+  res.json({ hosts: saveProxyAllowlist(list) });
+});
+
+// ---------------------------------------------------------------------------
 // API Client — proxy endpoint
 // ---------------------------------------------------------------------------
 app.post('/api/proxy', async (req, res) => {
   const { method = 'GET', url, headers = {}, body, timeout = 30000, stream = false } = req.body;
   if (!url) return res.json({ error: true, body: 'URL is required', status: 0, statusText: '', headers: {}, time: 0, size: 0 });
+
+  const gate = checkProxyTarget(url);
+  if (!gate.ok) {
+    const needsApproval = gate.reason === 'unapproved';
+    const message = gate.reason === 'protocol' ? `Protocol "${gate.host}" is not allowed (http/https only)`
+      : gate.reason === 'parse'    ? 'Invalid URL'
+      : `Host "${gate.host}" is not in the proxy allowlist. Approve it to continue.`;
+    return res.status(403).json({ error: true, needsApproval, host: gate.host, body: message, status: 0, statusText: '', headers: {}, time: 0, size: 0 });
+  }
 
   console.log(`[proxy] ${method} ${url} (timeout=${timeout}, stream=${stream})`);
   const start = Date.now();
@@ -3865,6 +3965,15 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 app.post('/api/proxy/upload', upload.any(), async (req, res) => {
   const { _target_url, _target_method = 'POST', _target_headers = '{}', _target_timeout = '600000' } = req.body || {};
   if (!_target_url) return res.json({ error: true, body: 'URL is required', status: 0, statusText: '', headers: {}, time: 0, size: 0 });
+
+  const gate = checkProxyTarget(_target_url);
+  if (!gate.ok) {
+    const needsApproval = gate.reason === 'unapproved';
+    const message = gate.reason === 'protocol' ? `Protocol "${gate.host}" is not allowed (http/https only)`
+      : gate.reason === 'parse'    ? 'Invalid URL'
+      : `Host "${gate.host}" is not in the proxy allowlist. Approve it to continue.`;
+    return res.status(403).json({ error: true, needsApproval, host: gate.host, body: message, status: 0, statusText: '', headers: {}, time: 0, size: 0 });
+  }
 
   console.log(`[proxy/upload] ${_target_method} ${_target_url} (files=${(req.files || []).length})`);
   const start = Date.now();
@@ -4865,6 +4974,7 @@ function discoverDbConnections() {
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_DATABASE || 'postgres',
       ssl: process.env.DB_SSL === 'true',
+      sslInsecure: process.env.DB_SSL_INSECURE === 'true',
       color: palette[0],
       envPrefix: 'DB',
     });
@@ -4888,6 +4998,7 @@ function discoverDbConnections() {
       password: process.env[p + 'PASSWORD'] || '',
       database: process.env[p + 'DATABASE'] || 'core',
       ssl: process.env[p + 'SSL'] === 'true',
+      sslInsecure: process.env[p + 'SSL_INSECURE'] === 'true',
       color: palette[connections.length % palette.length],
       envPrefix: `DB_${prefix}`,
     });
@@ -4925,7 +5036,7 @@ function getDbPool(connectionId) {
     user: conn.user,
     password: conn.password,
     database: conn.database,
-    ssl: conn.ssl ? { rejectUnauthorized: false } : false,
+    ssl: conn.ssl ? { rejectUnauthorized: !conn.sslInsecure } : false,
     max: 5,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
@@ -4946,6 +5057,16 @@ function isQuerySafe(sql, allowWrite) {
   return !dangerous.test(upper);
 }
 
+// Whitelist a SQL identifier (schema/table/column) for safe interpolation.
+// Postgres/SQLite identifiers are restricted to alnum + underscore here; anything
+// else throws rather than reaching the query engine.
+function safeIdent(name) {
+  if (typeof name !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error(`Unsafe identifier: ${name}`);
+  }
+  return name;
+}
+
 // GET /api/db/connections — return env-sourced connection list
 app.get('/api/db/connections', (_req, res) => {
   const connections = discoverDbConnections();
@@ -4955,7 +5076,7 @@ app.get('/api/db/connections', (_req, res) => {
 
 // POST /api/db/connections/test — test a connection
 app.post('/api/db/connections/test', async (req, res) => {
-  let { host, port, user, password, database, ssl, connectionId } = req.body;
+  let { host, port, user, password, database, ssl, sslInsecure, connectionId } = req.body;
   const conn = connectionId ? discoverDbConnections().find(c => c.id === connectionId) : null;
   if (conn && isSqliteConnection(conn)) {
     try {
@@ -4967,9 +5088,11 @@ app.post('/api/db/connections/test', async (req, res) => {
   }
   // Resolve masked password from env
   if (password === '••••••' && conn) password = conn.password;
+  // Inherit sslInsecure from the saved connection when tester didn't supply it
+  if (typeof sslInsecure === 'undefined' && conn) sslInsecure = conn.sslInsecure;
   const testPool = new pg.Pool({
     host, port, user, password, database,
-    ssl: ssl ? { rejectUnauthorized: false } : false,
+    ssl: ssl ? { rejectUnauthorized: !sslInsecure } : false,
     max: 1,
     connectionTimeoutMillis: 5000,
   });
@@ -5019,8 +5142,9 @@ app.get('/api/db/schema', async (req, res) => {
       // Tables
       const tables = sqliteQuery(db, "SELECT name, type FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
       for (const t of tables.rows) {
-        const cols = sqliteQuery(db, `PRAGMA table_info("${t.name}")`);
-        const fks = sqliteQuery(db, `PRAGMA foreign_key_list("${t.name}")`);
+        const ident = safeIdent(t.name);
+        const cols = sqliteQuery(db, `PRAGMA table_info("${ident}")`);
+        const fks = sqliteQuery(db, `PRAGMA foreign_key_list("${ident}")`);
         const fkMap = {};
         for (const fk of fks.rows) fkMap[fk.from] = { refSchema: schema, refTable: fk.table, refColumn: fk.to };
 
@@ -5036,7 +5160,7 @@ app.get('/api/db/schema', async (req, res) => {
       // Views
       const views = sqliteQuery(db, "SELECT name FROM sqlite_master WHERE type='view' ORDER BY name");
       for (const v of views.rows) {
-        const cols = sqliteQuery(db, `PRAGMA table_info("${v.name}")`);
+        const cols = sqliteQuery(db, `PRAGMA table_info("${safeIdent(v.name)}")`);
         schemas[schema].views.push({
           name: v.name, type: 'view',
           columns: cols.rows.map(c => ({
@@ -5163,6 +5287,7 @@ app.post('/api/db/query', async (req, res) => {
   try {
     const { sql, writeMode } = req.body;
     if (!sql || !sql.trim()) return res.status(400).json({ error: 'Empty query' });
+    if (sql.length > 200_000) return res.status(413).json({ error: 'Query too large (max 200KB)' });
 
     if (!isQuerySafe(sql, writeMode)) {
       return res.status(403).json({ error: 'Write operations blocked. Enable Write Mode to execute INSERT/UPDATE/DELETE/DDL.' });
@@ -5208,9 +5333,10 @@ app.get('/api/db/table/:schema/:table', async (req, res) => {
 
     if (isSqliteConnection(conn)) {
       const db = await getSqliteDemo();
-      const cols = sqliteQuery(db, `PRAGMA table_info("${table}")`);
-      const countR = sqliteQuery(db, `SELECT count(*) AS count FROM "${table}"`);
-      const idxList = sqliteQuery(db, `PRAGMA index_list("${table}")`);
+      const ident = safeIdent(table);
+      const cols = sqliteQuery(db, `PRAGMA table_info("${ident}")`);
+      const countR = sqliteQuery(db, `SELECT count(*) AS count FROM "${ident}"`);
+      const idxList = sqliteQuery(db, `PRAGMA index_list("${ident}")`);
       const indexes = idxList.rows.map(idx => ({
         indexname: idx.name,
         indexdef: `${idx.unique ? 'UNIQUE ' : ''}INDEX ${idx.name}`,
@@ -5236,7 +5362,7 @@ app.get('/api/db/table/:schema/:table', async (req, res) => {
         WHERE table_schema = $1 AND table_name = $2
         ORDER BY ordinal_position
       `, [schema, table]),
-      pool.query(`SELECT count(*)::int AS count FROM "${schema}"."${table}"`).catch(() => ({ rows: [{ count: '?' }] })),
+      pool.query(`SELECT count(*)::int AS count FROM "${safeIdent(schema)}"."${safeIdent(table)}"`).catch(() => ({ rows: [{ count: '?' }] })),
       pool.query(`
         SELECT indexname, indexdef
         FROM pg_indexes
@@ -5910,9 +6036,9 @@ io.on('connection', (socket) => {
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '127.0.0.1', () => {
   console.log(`\n  ${CONFIG.title || 'Dev Dashboard'}`);
-  console.log(`  http://localhost:${PORT}\n`);
+  console.log(`  http://localhost:${PORT} (loopback only)\n`);
   console.log(`  Base dir: ${BASE_DIR}`);
   console.log(`  Data dir: ${getDataDir()}`);
   console.log(`  API dir:  ${getApiDir()}`);

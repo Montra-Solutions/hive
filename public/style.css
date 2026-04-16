@@ -6506,6 +6506,41 @@ details.settings-section[open] > .settings-section-header::before {
   margin-left: 4px;
 }
 
+.settings-proxy-list {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-proxy-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--surface0, #313244);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.settings-proxy-list code {
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+}
+.settings-proxy-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+.settings-proxy-add .settings-input { flex: 1; }
+.settings-proxy-error {
+  font-size: 11px;
+  color: var(--red);
+}
+
 .settings-chip-input {
   background: transparent;
   border: 1px dashed var(--surface1);
