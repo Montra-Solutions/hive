@@ -1528,6 +1528,9 @@ async function initRepo() {
   // Allow settings page to refresh the list after config save
   window.refreshRepoList = populateRepoDropdown;
 
+  document.getElementById('repo-refresh-btn')?.addEventListener('click', () => {
+    if (currentRepo) loadRepoTree(currentRepo);
+  });
   document.getElementById('repo-new-file-btn')?.addEventListener('click', () => showNewFileInput());
 
   select.addEventListener('change', async () => {
