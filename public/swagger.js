@@ -142,6 +142,7 @@ function initSwagger() {
   // Collection actions
   document.getElementById('api-new-collection').addEventListener('click', createNewCollection);
   document.getElementById('api-import-btn').addEventListener('click', (e) => { e.stopPropagation(); showImportMenu(e); });
+  document.getElementById('api-reload-collections').addEventListener('click', reloadCollectionsFromDisk);
 
   // Postman import modal
   document.getElementById('api-postman-modal-close').addEventListener('click', closePostmanModal);
@@ -283,6 +284,31 @@ function resolveVariables(text) {
   return text.replace(/\{\{([\w.:-]+)\}\}/g, (match, key) => vars[key] !== undefined ? vars[key] : match);
 }
 
+// Build the tooltip text for an input that may contain {{var}} references.
+// Returns '' when there are no variables (caller should clear the title).
+function buildVariableTooltip(raw) {
+  if (!raw || !/\{\{[\w.:-]+\}\}/.test(raw)) return '';
+  const resolved = resolveVariables(raw);
+  const lines = [resolved];
+  const seen = new Set();
+  raw.replace(/\{\{([\w.:-]+)\}\}/g, (_, key) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    const val = resolveVariables(`{{${key}}}`);
+    lines.push(`{{${key}}} = ${val === `{{${key}}}` ? '(undefined)' : val}`);
+  });
+  return lines.join('\n');
+}
+
+// Attach a live-updating variable-resolution tooltip to an input/textarea.
+function attachVariableTooltip(el) {
+  if (!el) return;
+  const refresh = () => { el.title = buildVariableTooltip(el.value || ''); };
+  refresh();
+  el.addEventListener('input', refresh);
+  el.addEventListener('focus', refresh);
+}
+
 function updateUrlTooltip() {
   const urlInput = document.getElementById('api-url');
   if (!urlInput) return;
@@ -329,8 +355,10 @@ function createEmptyTab() {
     bodyContent: '',
     bodyFormData: [{ key: '', value: '', enabled: false }],
     preScript: '',
+    postScript: '',
     testScript: '',
     preScriptLogs: [],
+    postScriptLogs: [],
     testScriptLogs: [],
     collectionPath: [],
     requestData: null,
@@ -353,8 +381,10 @@ function saveCurrentTabState() {
   tab.bodyContent = bodyContent;
   tab.bodyFormData = bodyFormData.map(r => { const { _file, ...rest } = r; return rest; });
   tab.preScript = preScript;
+  tab.postScript = postScript;
   tab.testScript = testScript;
   tab.preScriptLogs = [...preScriptLogs];
+  tab.postScriptLogs = [...postScriptLogs];
   tab.testScriptLogs = [...testScriptLogs];
   tab.collectionPath = [...currentCollectionPath];
   tab.requestData = currentRequestData;
@@ -401,10 +431,13 @@ function loadTabState(tab) {
   renderBodyPanel();
 
   preScript = tab.preScript || '';
+  postScript = tab.postScript || '';
   testScript = tab.testScript || '';
   preScriptLogs = tab.preScriptLogs || [];
+  postScriptLogs = tab.postScriptLogs || [];
   testScriptLogs = tab.testScriptLogs || [];
   renderScriptPanel('pre-script');
+  renderScriptPanel('post-script');
   renderScriptPanel('tests');
 
   currentCollectionPath = tab.collectionPath || [];
@@ -578,6 +611,7 @@ function persistTabs() {
       bodyContent: t.bodyContent,
       bodyFormData: t.bodyFormData,
       preScript: t.preScript,
+      postScript: t.postScript,
       testScript: t.testScript,
       collectionPath: t.collectionPath,
     }));
@@ -650,27 +684,33 @@ function renderDocsPanel() {
     return;
   }
 
-  if (!swaggerSpec) {
-    container.innerHTML = '<div class="api-docs-empty">API spec not loaded. <button class="btn btn-quick" id="api-docs-load-btn">Load Now</button></div>';
-    document.getElementById('api-docs-load-btn')?.addEventListener('click', () => {
-      loadSwaggerSpec().then(() => renderDocsPanel());
-    });
+  // Prefer a live swaggerSpec match (populated by /api/swagger); fall back to
+  // docs captured at OpenAPI-import time on the request itself (so imported
+  // collections keep their docs after refresh when the live spec isn't loaded).
+  const liveMatch = swaggerSpec ? findSwaggerEndpoint(url, method) : null;
+  const storedDocs = currentRequestData && currentRequestData.docs;
+
+  if (!liveMatch && !storedDocs) {
+    if (!swaggerSpec) {
+      container.innerHTML = '<div class="api-docs-empty">No stored docs for this request. <button class="btn btn-quick" id="api-docs-load-btn">Load live API spec</button></div>';
+      document.getElementById('api-docs-load-btn')?.addEventListener('click', () => {
+        loadSwaggerSpec().then(() => renderDocsPanel());
+      });
+    } else {
+      container.innerHTML = '<div class="api-docs-empty">No matching endpoint found in the API spec for this URL and method.</div>';
+    }
     return;
   }
 
-  const match = findSwaggerEndpoint(url, method);
-  if (!match) {
-    container.innerHTML = '<div class="api-docs-empty">No matching endpoint found in the API spec for this URL and method.</div>';
-    return;
-  }
-
-  const ep = match.endpoint;
+  const ep = liveMatch ? liveMatch.endpoint : storedDocs;
+  const matchPath = liveMatch ? liveMatch.path : url;
+  const matchMethod = liveMatch ? liveMatch.method : (method || 'get').toLowerCase();
   let html = '<div class="api-docs-content">';
 
   // Method + Path
   html += `<div class="api-docs-header">
-    <span class="method-badge ${match.method}">${match.method.toUpperCase()}</span>
-    <span class="api-docs-path">${esc(match.path)}</span>
+    <span class="method-badge ${matchMethod}">${matchMethod.toUpperCase()}</span>
+    <span class="api-docs-path">${esc(matchPath)}</span>
   </div>`;
 
   // Summary
@@ -721,7 +761,7 @@ function renderDocsPanel() {
         html += `<div class="api-docs-media-type">${esc(mediaType)}</div>`;
         if (spec.schema) {
           try {
-            const example = buildSchemaExample(spec.schema, swaggerSpec);
+            const example = buildSchemaExample(spec.schema, swaggerSpec || {});
             html += `<pre class="api-docs-schema"><code class="language-json">${esc(JSON.stringify(example, null, 2))}</code></pre>`;
           } catch { /* skip on error */ }
         }
@@ -744,7 +784,7 @@ function renderDocsPanel() {
         for (const [, spec] of Object.entries(resp.content)) {
           if (spec.schema) {
             try {
-              const example = buildSchemaExample(spec.schema, swaggerSpec);
+              const example = buildSchemaExample(spec.schema, swaggerSpec || {});
               html += `<pre class="api-docs-schema"><code class="language-json">${esc(JSON.stringify(example, null, 2))}</code></pre>`;
             } catch { /* skip */ }
           }
@@ -860,6 +900,7 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
         maybeAddRow(idx);
       });
     }
+    attachVariableTooltip(keyInput);
     div.appendChild(keyInput);
 
     // Value column: file picker or text input
@@ -917,6 +958,7 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
         if (onChange) onChange(rows);
         maybeAddRow(idx);
       });
+      attachVariableTooltip(valInput);
       div.appendChild(valInput);
     }
 
@@ -1112,7 +1154,18 @@ function renderHeadersEditor() {
 // ---------------------------------------------------------------------------
 // Auth tab
 // ---------------------------------------------------------------------------
-let authConfig = { type: 'none', bearer: '', basicUser: '', basicPass: '' };
+let authConfig = { type: 'none', bearer: '', basicUser: '', basicPass: '', apiKeyName: '', apiKeyValue: '', apiKeyIn: 'header' };
+
+function authTypeLabel(t) {
+  switch (t) {
+    case 'none': return 'No Auth';
+    case 'inherit': return 'Inherit from Collection';
+    case 'bearer': return 'Bearer Token';
+    case 'basic': return 'Basic Auth';
+    case 'apikey': return 'API Key';
+    default: return t;
+  }
+}
 
 function renderAuthPanel() {
   const container = document.getElementById('api-reqtab-auth');
@@ -1123,10 +1176,10 @@ function renderAuthPanel() {
 
   const sel = document.createElement('select');
   sel.className = 'api-auth-type-select';
-  ['none', 'inherit', 'bearer', 'basic'].forEach(t => {
+  ['none', 'inherit', 'bearer', 'basic', 'apikey'].forEach(t => {
     const opt = document.createElement('option');
     opt.value = t;
-    opt.textContent = t === 'none' ? 'No Auth' : t === 'inherit' ? 'Inherit from Collection' : t === 'bearer' ? 'Bearer Token' : 'Basic Auth';
+    opt.textContent = authTypeLabel(t);
     if (t === authConfig.type) opt.selected = true;
     sel.appendChild(opt);
   });
@@ -1160,6 +1213,27 @@ function renderAuthPanel() {
     const inputs = fields.querySelectorAll('input');
     inputs[0].addEventListener('input', (e) => { authConfig.basicUser = e.target.value; markTabDirtyIfNeeded(); });
     inputs[1].addEventListener('input', (e) => { authConfig.basicPass = e.target.value; markTabDirtyIfNeeded(); });
+  } else if (authConfig.type === 'apikey') {
+    fields.innerHTML = `
+      <div class="api-auth-field">
+        <label>Key (header/param name)</label>
+        <input type="text" value="${esc(authConfig.apiKeyName || '')}" placeholder="X-API-KEY" />
+      </div>
+      <div class="api-auth-field">
+        <label>Value</label>
+        <input type="text" value="${esc(authConfig.apiKeyValue || '')}" placeholder="{{apiKey}}" />
+      </div>
+      <div class="api-auth-field">
+        <label>Add to</label>
+        <select class="api-auth-in-select">
+          <option value="header"${(authConfig.apiKeyIn || 'header') === 'header' ? ' selected' : ''}>Header</option>
+          <option value="query"${authConfig.apiKeyIn === 'query' ? ' selected' : ''}>Query param</option>
+        </select>
+      </div>`;
+    const inputs = fields.querySelectorAll('input');
+    inputs[0].addEventListener('input', (e) => { authConfig.apiKeyName = e.target.value; markTabDirtyIfNeeded(); });
+    inputs[1].addEventListener('input', (e) => { authConfig.apiKeyValue = e.target.value; markTabDirtyIfNeeded(); });
+    fields.querySelector('select').addEventListener('change', (e) => { authConfig.apiKeyIn = e.target.value; markTabDirtyIfNeeded(); });
   } else if (authConfig.type === 'inherit') {
     fields.innerHTML = '<div style="font-size:11px;color:var(--overlay0);padding:4px 0">Auth will be inherited from the parent collection/folder.</div>';
   }
@@ -1214,6 +1288,7 @@ function renderBodyPanel() {
         bodyContent = textarea.value;
       }
     });
+    attachVariableTooltip(textarea);
     container.appendChild(textarea);
   } else if (bodyMode === 'form-data' || bodyMode === 'x-www-form-urlencoded') {
     const kvContainer = document.createElement('div');
@@ -1228,15 +1303,41 @@ function renderBodyPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// Script tabs (Pre-Script and Tests)
+// Script tabs (Pre-Script, Post-Script, Tests)
 // ---------------------------------------------------------------------------
 let preScript = '';
+let postScript = '';
 let testScript = '';
 let preScriptLogs = [];
+let postScriptLogs = [];
 let testScriptLogs = [];
 
+const SCRIPT_PANEL_CONFIG = {
+  'pre-script': {
+    placeholder: '// Pre-request script — runs before the request is sent\npm.environment.set("timestamp", Date.now());',
+    get value() { return preScript; },
+    set value(v) { preScript = v; },
+    get logs() { return preScriptLogs; },
+  },
+  'post-script': {
+    placeholder: '// Post-response script — runs after response, before tests.\n// Use to capture values into variables for later requests.\nconst data = pm.response.json();\npm.environment.set("authToken", data.access_token);',
+    get value() { return postScript; },
+    set value(v) { postScript = v; },
+    get logs() { return postScriptLogs; },
+  },
+  'tests': {
+    placeholder: '// Test script — assertions about the response\npm.test("status ok", () => {\n  pm.expect(pm.response.code).to.equal(200);\n});',
+    get value() { return testScript; },
+    set value(v) { testScript = v; },
+    get logs() { return testScriptLogs; },
+  },
+};
+
 function renderScriptPanel(tabId) {
+  const cfg = SCRIPT_PANEL_CONFIG[tabId];
+  if (!cfg) return;
   const container = document.getElementById('api-reqtab-' + tabId);
+  if (!container) return;
   container.innerHTML = '';
 
   const panel = document.createElement('div');
@@ -1244,13 +1345,10 @@ function renderScriptPanel(tabId) {
 
   const textarea = document.createElement('textarea');
   textarea.className = 'api-script-textarea';
-  textarea.value = tabId === 'pre-script' ? preScript : testScript;
-  textarea.placeholder = tabId === 'pre-script'
-    ? '// Pre-request script\npm.environment.set("timestamp", Date.now());'
-    : '// Test script\npm.test("status ok", () => {\n  pm.expect(pm.response.code).to.equal(200);\n});';
+  textarea.value = cfg.value;
+  textarea.placeholder = cfg.placeholder;
   textarea.addEventListener('input', () => {
-    if (tabId === 'pre-script') preScript = textarea.value;
-    else testScript = textarea.value;
+    cfg.value = textarea.value;
     markTabDirtyIfNeeded();
   });
   textarea.addEventListener('keydown', (e) => {
@@ -1260,8 +1358,7 @@ function renderScriptPanel(tabId) {
       const end = textarea.selectionEnd;
       textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
       textarea.selectionStart = textarea.selectionEnd = start + 2;
-      if (tabId === 'pre-script') preScript = textarea.value;
-      else testScript = textarea.value;
+      cfg.value = textarea.value;
     }
   });
   panel.appendChild(textarea);
@@ -1273,15 +1370,18 @@ function renderScriptPanel(tabId) {
   const refBox = document.createElement('div');
   refBox.className = 'api-script-ref';
   refBox.style.display = 'none';
-  refBox.innerHTML = `<strong>pm.variables</strong>.get(key) / .set(key, val) — request-scoped
-<strong>pm.collectionVariables</strong>.get(key) / .set(key, val) — collection-scoped
-<strong>pm.environment</strong>.get(key) / .set(key, val) — persisted to env
+  refBox.innerHTML = `<strong>pm.variables</strong>.get(key) / .set(key, val) — session-scoped (in-memory, survives across requests)
+<strong>pm.collectionVariables</strong>.get(key) / .set(key, val) — collection-scoped (persisted)
+<strong>pm.environment</strong>.get(key) / .set(key, val) — environment-scoped (persisted)
 <strong>pm.request</strong>.url / .headers / .body — mutate (pre-script only)
-<strong>pm.response</strong>.code / .json() / .text() / .headers / .responseTime
+<strong>pm.response</strong>.code / .json() / .text() / .headers / .responseTime — available in post-script &amp; tests
 <strong>pm.test</strong>(name, fn) — register test assertion
 <strong>pm.expect</strong>(val).to.equal / .eql / .be.above / .below / .include / .have.property
 <strong>pm.expect</strong>(val).to.be.a("string") / .be.ok / .be.true / .be.null
-<strong>console</strong>.log / .warn / .error — captured in output`;
+<strong>console</strong>.log / .warn / .error — captured in output
+
+<em>Execution order:</em> pre-script → request sent → post-script → tests
+<em>Scope walk:</em> pre: collection → folders (outer→inner) → request; post &amp; tests: request → folders (inner→outer) → collection`;
   refToggle.addEventListener('click', () => {
     const vis = refBox.style.display !== 'none';
     refBox.style.display = vis ? 'none' : '';
@@ -1291,7 +1391,7 @@ function renderScriptPanel(tabId) {
   panel.appendChild(refBox);
 
   // Script output
-  const logs = tabId === 'pre-script' ? preScriptLogs : testScriptLogs;
+  const logs = cfg.logs;
   if (logs.length > 0) {
     const output = document.createElement('div');
     output.className = 'api-script-output';
@@ -1458,7 +1558,11 @@ async function readStreamingProxy(proxyRes) {
 // ---------------------------------------------------------------------------
 // Gather collection and folder scripts for the current request's ancestry
 function getAncestryScripts() {
-  const result = { collPreScript: '', collTestScript: '', folderPreScripts: [], folderTestScripts: [], collectionVariables: [] };
+  const result = {
+    collPreScript: '', collPostScript: '', collTestScript: '',
+    folderPreScripts: [], folderPostScripts: [], folderTestScripts: [],
+    collectionVariables: [],
+  };
   if (currentCollectionPath.length === 0) return result;
 
   const collId = currentCollectionPath[0];
@@ -1466,6 +1570,7 @@ function getAncestryScripts() {
   if (!coll) return result;
 
   result.collPreScript = coll.preScript || '';
+  result.collPostScript = coll.postScript || '';
   result.collTestScript = coll.testScript || '';
   result.collectionVariables = coll.variables || [];
 
@@ -1475,6 +1580,7 @@ function getAncestryScripts() {
     const folder = findFolderById(coll, fid);
     if (folder) {
       if (folder.preScript) result.folderPreScripts.push(folder.preScript);
+      if (folder.postScript) result.folderPostScripts.push(folder.postScript);
       if (folder.testScript) result.folderTestScripts.push(folder.testScript);
     }
   }
@@ -1578,6 +1684,14 @@ async function sendRequest() {
       const user = resolveVariables(resolvedAuth.basicUser || '');
       const pass = resolveVariables(resolvedAuth.basicPass || '');
       resolvedHeaders['Authorization'] = 'Basic ' + btoa(user + ':' + pass);
+    } else if (resolvedAuth.type === 'apikey' && resolvedAuth.apiKeyName) {
+      const name = resolveVariables(resolvedAuth.apiKeyName);
+      const val = resolveVariables(resolvedAuth.apiKeyValue || '');
+      if ((resolvedAuth.apiKeyIn || 'header') === 'query') {
+        url += (url.includes('?') ? '&' : '?') + encodeURIComponent(name) + '=' + encodeURIComponent(val);
+      } else {
+        resolvedHeaders[name] = val;
+      }
     }
 
     // Re-resolve body
@@ -1651,9 +1765,37 @@ async function sendRequest() {
     consoleLog.unshift(consoleEntry);
     if (consoleLog.length > 50) consoleLog.length = 50;
 
-    // --- Test scripts: request → folders (innermost→outermost) → collection ---
     // Update requestData to reflect what was actually sent
     const sentRequestData = { url, headers: resolvedHeaders, body: reqBody };
+
+    // --- Post-scripts: request → folders (innermost→outermost) → collection ---
+    // Post-scripts run after the response but before tests — use to capture values
+    // (tokens, IDs, etc.) into session/env/collection variables for later requests.
+    let allPostLogs = [];
+
+    if (postScript.trim()) {
+      const r = await runScript('post', postScript, sentRequestData, response, ancestry.collectionVariables);
+      allPostLogs = allPostLogs.concat(r.logs || []);
+      applyScriptMutations(r, sentRequestData);
+    }
+    for (let i = ancestry.folderPostScripts.length - 1; i >= 0; i--) {
+      const folderScript = ancestry.folderPostScripts[i];
+      if (folderScript.trim()) {
+        const r = await runScript('post', folderScript, sentRequestData, response, ancestry.collectionVariables);
+        allPostLogs = allPostLogs.concat(r.logs || []);
+        applyScriptMutations(r, sentRequestData);
+      }
+    }
+    if (ancestry.collPostScript.trim()) {
+      const r = await runScript('post', ancestry.collPostScript, sentRequestData, response, ancestry.collectionVariables);
+      allPostLogs = allPostLogs.concat(r.logs || []);
+      applyScriptMutations(r, sentRequestData);
+    }
+
+    postScriptLogs = allPostLogs;
+    renderScriptPanel('post-script');
+
+    // --- Test scripts: request → folders (innermost→outermost) → collection ---
     let allTestResults = [];
     let allTestLogs = [];
 
@@ -2258,10 +2400,13 @@ function consoleLoadIntoBuilder(entry) {
   authConfig = { type: 'none' };
   renderAuthPanel();
   preScript = '';
+  postScript = '';
   testScript = '';
   preScriptLogs = [];
+  postScriptLogs = [];
   testScriptLogs = [];
   renderScriptPanel('pre-script');
+  renderScriptPanel('post-script');
   renderScriptPanel('tests');
 
   // Reset response panel
@@ -2319,6 +2464,25 @@ async function saveCollections() {
   });
 }
 
+async function reloadCollectionsFromDisk() {
+  // Warn if the current tab has unsaved changes — a reload will overwrite
+  // the in-memory collection objects and any pending edits will be lost.
+  const dirty = openTabs.some(t => t._dirty);
+  if (dirty && !confirm('You have unsaved changes in one or more tabs. Reload collections from disk anyway?')) return;
+  await loadCollections();
+  // Re-resolve current request from the freshly loaded collection (preserves open tab)
+  if (currentCollectionPath.length >= 2) {
+    const collId = currentCollectionPath[0];
+    const reqId = currentCollectionPath[currentCollectionPath.length - 1];
+    const coll = collections.find(c => c.id === collId);
+    if (coll) {
+      const fresh = findRequestInCollection(coll, reqId);
+      if (fresh) currentRequestData = fresh;
+    }
+  }
+  renderCollectionsTree();
+}
+
 function createNewCollection() {
   const name = prompt('Collection name:');
   if (!name) return;
@@ -2328,6 +2492,7 @@ function createNewCollection() {
     auth: { type: 'none' },
     variables: [],
     preScript: '',
+    postScript: '',
     testScript: '',
     folders: [],
     requests: [],
@@ -2832,10 +2997,13 @@ function loadRequestIntoBuilder(req, collId, folderPath) {
   renderBodyPanel();
 
   preScript = req.preScript || '';
+  postScript = req.postScript || '';
   testScript = req.testScript || '';
   preScriptLogs = [];
+  postScriptLogs = [];
   testScriptLogs = [];
   renderScriptPanel('pre-script');
+  renderScriptPanel('post-script');
   renderScriptPanel('tests');
 
   currentResponse = null;
@@ -2862,6 +3030,7 @@ let collEditorTarget = null; // { collection, folder? }
 let collEditorAuth = { type: 'none' };
 let collEditorVariables = [];
 let collEditorPreScript = '';
+let collEditorPostScript = '';
 let collEditorTestScript = '';
 
 function openCollectionEditor(coll) {
@@ -2869,6 +3038,7 @@ function openCollectionEditor(coll) {
   collEditorAuth = coll.auth ? { ...coll.auth } : { type: 'none' };
   collEditorVariables = (coll.variables || []).map(v => ({ ...v }));
   collEditorPreScript = coll.preScript || '';
+  collEditorPostScript = coll.postScript || '';
   collEditorTestScript = coll.testScript || '';
   showCollEditorModal('Edit Collection: ' + (coll.name || 'Untitled'));
 }
@@ -2878,6 +3048,7 @@ function openFolderEditor(coll, folder) {
   collEditorAuth = folder.auth ? { ...folder.auth } : { type: 'inherit' };
   collEditorVariables = (folder.variables || []).map(v => ({ ...v }));
   collEditorPreScript = folder.preScript || '';
+  collEditorPostScript = folder.postScript || '';
   collEditorTestScript = folder.testScript || '';
   showCollEditorModal('Edit Folder: ' + (folder.name || 'Untitled'));
 }
@@ -2895,6 +3066,7 @@ function showCollEditorModal(title) {
   renderCollEditorAuth();
   renderCollEditorVariables();
   renderCollEditorScript('pre-script');
+  renderCollEditorScript('post-script');
   renderCollEditorScript('tests');
 }
 
@@ -2909,6 +3081,7 @@ function saveCollEditor() {
   target.auth = { ...collEditorAuth };
   target.variables = collEditorVariables.filter(v => v.key);
   target.preScript = collEditorPreScript;
+  target.postScript = collEditorPostScript;
   target.testScript = collEditorTestScript;
   saveCollections();
   closeCollEditorModal();
@@ -2945,15 +3118,15 @@ function renderCollEditorAuth() {
 
   const isFolder = collEditorTarget && collEditorTarget.folder;
   const authTypes = isFolder
-    ? ['inherit', 'none', 'bearer', 'basic']
-    : ['none', 'bearer', 'basic'];
+    ? ['inherit', 'none', 'bearer', 'basic', 'apikey']
+    : ['none', 'bearer', 'basic', 'apikey'];
 
   const sel = document.createElement('select');
   sel.className = 'api-auth-type-select';
   for (const t of authTypes) {
     const opt = document.createElement('option');
     opt.value = t;
-    opt.textContent = t === 'none' ? 'No Auth' : t === 'inherit' ? 'Inherit from Collection' : t === 'bearer' ? 'Bearer Token' : 'Basic Auth';
+    opt.textContent = authTypeLabel(t);
     if (t === collEditorAuth.type) opt.selected = true;
     sel.appendChild(opt);
   }
@@ -2986,6 +3159,27 @@ function renderCollEditorAuth() {
     const inputs = fields.querySelectorAll('input');
     inputs[0].addEventListener('input', (e) => { collEditorAuth.basicUser = e.target.value; });
     inputs[1].addEventListener('input', (e) => { collEditorAuth.basicPass = e.target.value; });
+  } else if (collEditorAuth.type === 'apikey') {
+    fields.innerHTML = `
+      <div class="api-auth-field">
+        <label>Key (header/param name)</label>
+        <input type="text" value="${esc(collEditorAuth.apiKeyName || '')}" placeholder="X-API-KEY" />
+      </div>
+      <div class="api-auth-field">
+        <label>Value</label>
+        <input type="text" value="${esc(collEditorAuth.apiKeyValue || '')}" placeholder="{{apiKey}}" />
+      </div>
+      <div class="api-auth-field">
+        <label>Add to</label>
+        <select class="api-auth-in-select">
+          <option value="header"${(collEditorAuth.apiKeyIn || 'header') === 'header' ? ' selected' : ''}>Header</option>
+          <option value="query"${collEditorAuth.apiKeyIn === 'query' ? ' selected' : ''}>Query param</option>
+        </select>
+      </div>`;
+    const inputs = fields.querySelectorAll('input');
+    inputs[0].addEventListener('input', (e) => { collEditorAuth.apiKeyName = e.target.value; });
+    inputs[1].addEventListener('input', (e) => { collEditorAuth.apiKeyValue = e.target.value; });
+    fields.querySelector('select').addEventListener('change', (e) => { collEditorAuth.apiKeyIn = e.target.value; });
   } else if (collEditorAuth.type === 'inherit') {
     fields.innerHTML = '<div style="font-size:11px;color:var(--overlay0);padding:4px 0">Auth will be inherited from the parent collection.</div>';
   }
@@ -3003,83 +3197,53 @@ function renderCollEditorVariables() {
   desc.textContent = 'Variables defined here are available as {{key}} in all requests within this ' + (collEditorTarget && collEditorTarget.folder ? 'folder' : 'collection') + '.';
   container.appendChild(desc);
 
-  // Ensure at least one empty row
+  // Ensure at least one empty row so the user has something to type into
   if (collEditorVariables.length === 0 || collEditorVariables[collEditorVariables.length - 1].key) {
     collEditorVariables.push({ key: '', value: '', enabled: false });
   }
 
-  const wrapper = document.createElement('div');
-  wrapper.className = 'api-kv-editor';
-  wrapper.id = 'api-ced-vars-editor';
-
-  for (let idx = 0; idx < collEditorVariables.length; idx++) {
-    const row = collEditorVariables[idx];
-    const div = document.createElement('div');
-    div.className = 'api-kv-row';
-
-    const check = document.createElement('input');
-    check.type = 'checkbox';
-    check.className = 'api-kv-check';
-    check.checked = row.enabled !== false;
-    check.addEventListener('change', () => { row.enabled = check.checked; });
-
-    const keyInput = document.createElement('input');
-    keyInput.type = 'text';
-    keyInput.className = 'api-kv-input';
-    keyInput.placeholder = 'Key';
-    keyInput.value = row.key || '';
-    keyInput.addEventListener('input', () => {
-      row.key = keyInput.value;
-      // Auto-add row
-      if (idx === collEditorVariables.length - 1 && keyInput.value) {
-        collEditorVariables.push({ key: '', value: '', enabled: false });
-        renderCollEditorVariables();
-      }
-    });
-
-    const valInput = document.createElement('input');
-    valInput.type = 'text';
-    valInput.className = 'api-kv-input';
-    valInput.placeholder = 'Value';
-    valInput.value = row.value || '';
-    valInput.addEventListener('input', () => { row.value = valInput.value; });
-
-    const delBtn = document.createElement('button');
-    delBtn.className = 'api-kv-delete';
-    delBtn.textContent = '\u00D7';
-    delBtn.addEventListener('click', () => {
-      collEditorVariables.splice(idx, 1);
-      renderCollEditorVariables();
-    });
-
-    div.appendChild(check);
-    div.appendChild(keyInput);
-    div.appendChild(valInput);
-    div.appendChild(delBtn);
-    wrapper.appendChild(div);
-  }
-
-  container.appendChild(wrapper);
+  const editor = document.createElement('div');
+  editor.id = 'api-ced-vars-editor';
+  container.appendChild(editor);
+  // Reuse the shared kv editor — gives us proper column widths, variable
+  // tooltips on the value input, and drag-to-reorder.
+  renderKeyValueEditor('api-ced-vars-editor', collEditorVariables, {});
 }
 
 function renderCollEditorScript(tabId) {
-  const paneId = tabId === 'pre-script' ? 'api-cedtab-pre-script' : 'api-cedtab-tests';
+  const paneId = 'api-cedtab-' + tabId;
   const container = document.getElementById(paneId);
+  if (!container) return;
   container.innerHTML = '';
+
+  const scope = collEditorTarget && collEditorTarget.folder ? 'folder' : 'collection';
+  const cfg = {
+    'pre-script': {
+      placeholder: `// ${scope} pre-request script\n// Runs before every request in this ${scope}`,
+      get value() { return collEditorPreScript; },
+      set value(v) { collEditorPreScript = v; },
+    },
+    'post-script': {
+      placeholder: `// ${scope} post-response script\n// Runs after every request in this ${scope}, before tests.\n// Capture values for later requests, e.g. pm.environment.set("token", pm.response.json().access_token)`,
+      get value() { return collEditorPostScript; },
+      set value(v) { collEditorPostScript = v; },
+    },
+    'tests': {
+      placeholder: `// ${scope} test script\n// Runs after every request in this ${scope}`,
+      get value() { return collEditorTestScript; },
+      set value(v) { collEditorTestScript = v; },
+    },
+  }[tabId];
+  if (!cfg) return;
 
   const panel = document.createElement('div');
   panel.className = 'api-script-panel';
 
   const textarea = document.createElement('textarea');
   textarea.className = 'api-script-textarea';
-  textarea.value = tabId === 'pre-script' ? collEditorPreScript : collEditorTestScript;
-  textarea.placeholder = tabId === 'pre-script'
-    ? '// Collection pre-request script\n// Runs before every request in this collection'
-    : '// Collection test script\n// Runs after every request in this collection';
-  textarea.addEventListener('input', () => {
-    if (tabId === 'pre-script') collEditorPreScript = textarea.value;
-    else collEditorTestScript = textarea.value;
-  });
+  textarea.value = cfg.value;
+  textarea.placeholder = cfg.placeholder;
+  textarea.addEventListener('input', () => { cfg.value = textarea.value; });
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -3087,8 +3251,7 @@ function renderCollEditorScript(tabId) {
       const end = textarea.selectionEnd;
       textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
       textarea.selectionStart = textarea.selectionEnd = start + 2;
-      if (tabId === 'pre-script') collEditorPreScript = textarea.value;
-      else collEditorTestScript = textarea.value;
+      cfg.value = textarea.value;
     }
   });
   panel.appendChild(textarea);
@@ -3099,14 +3262,16 @@ function renderCollEditorScript(tabId) {
   const refBox = document.createElement('div');
   refBox.className = 'api-script-ref';
   refBox.style.display = 'none';
-  refBox.innerHTML = `<strong>pm.variables</strong>.get(key) / .set(key, val) — request-scoped
-<strong>pm.collectionVariables</strong>.get(key) / .set(key, val) — collection-scoped
-<strong>pm.environment</strong>.get(key) / .set(key, val) — persisted to env
+  refBox.innerHTML = `<strong>pm.variables</strong>.get(key) / .set(key, val) — session-scoped (in-memory)
+<strong>pm.collectionVariables</strong>.get(key) / .set(key, val) — collection-scoped (persisted)
+<strong>pm.environment</strong>.get(key) / .set(key, val) — environment-scoped (persisted)
 <strong>pm.request</strong>.url / .headers / .body — mutate (pre-script only)
-<strong>pm.response</strong>.code / .json() / .text() / .headers / .responseTime
+<strong>pm.response</strong>.code / .json() / .text() / .headers / .responseTime — post-script &amp; tests
 <strong>pm.test</strong>(name, fn) — register test assertion
 <strong>pm.expect</strong>(val).to.equal / .eql / .be.above / .below / .include / .have.property
-<strong>console</strong>.log / .warn / .error — captured in output`;
+<strong>console</strong>.log / .warn / .error — captured in output
+
+<em>Order:</em> pre-script → request sent → post-script → tests`;
   refToggle.addEventListener('click', () => {
     const vis = refBox.style.display !== 'none';
     refBox.style.display = vis ? 'none' : '';
@@ -3240,6 +3405,7 @@ function addRequestToCollection(coll) {
     bodyMode: 'none',
     bodyContent: '',
     preScript: '',
+    postScript: '',
     testScript: '',
   });
   saveCollections();
@@ -3250,7 +3416,7 @@ function addFolderToCollection(coll) {
   const name = prompt('Folder name:');
   if (!name) return;
   if (!coll.folders) coll.folders = [];
-  coll.folders.push({ id: 'fld_' + Date.now(), name, auth: { type: 'inherit' }, variables: [], preScript: '', testScript: '', folders: [], requests: [] });
+  coll.folders.push({ id: 'fld_' + Date.now(), name, auth: { type: 'inherit' }, variables: [], preScript: '', postScript: '', testScript: '', folders: [], requests: [] });
   saveCollections();
   renderCollectionsTree();
 }
@@ -3259,7 +3425,7 @@ function addSubFolder(parentFolder) {
   const name = prompt('Folder name:');
   if (!name) return;
   if (!parentFolder.folders) parentFolder.folders = [];
-  parentFolder.folders.push({ id: 'fld_' + Date.now(), name, auth: { type: 'inherit' }, variables: [], preScript: '', testScript: '', folders: [], requests: [] });
+  parentFolder.folders.push({ id: 'fld_' + Date.now(), name, auth: { type: 'inherit' }, variables: [], preScript: '', postScript: '', testScript: '', folders: [], requests: [] });
   saveCollections();
   renderCollectionsTree();
 }
@@ -3279,6 +3445,7 @@ function addRequestToFolder(coll, folder) {
     bodyMode: 'none',
     bodyContent: '',
     preScript: '',
+    postScript: '',
     testScript: '',
   });
   saveCollections();
@@ -3367,10 +3534,24 @@ function duplicateRequest(collId, folderId, req) {
 // Save (in-place) + Dirty tracking
 // ---------------------------------------------------------------------------
 function saveCurrentRequest() {
+  // If the tab isn't linked to a collection yet, try to locate an existing
+  // request by URL + method — if exactly one match exists, adopt it as the
+  // save target so the user isn't prompted for a location every time.
   if (!currentRequestData || currentCollectionPath.length < 2) {
-    // Not from a collection — fall through to Save As
-    openSaveModal();
-    return;
+    const url = document.getElementById('api-url').value;
+    const method = document.getElementById('api-method').value;
+    const matches = findRequestsByUrlMethod(url, method);
+    if (matches.length === 1) {
+      const m = matches[0];
+      currentCollectionPath = m.folderId
+        ? [m.collectionId, m.folderId, m.request.id]
+        : [m.collectionId, m.request.id];
+      currentRequestData = m.request;
+      // fall through to the in-place save below
+    } else {
+      openSaveModal();
+      return;
+    }
   }
   const collId = currentCollectionPath[0];
   const coll = collections.find(c => c.id === collId);
@@ -3388,6 +3569,26 @@ function saveCurrentRequest() {
   renderOpenTabs();
   updateSaveButton();
   renderCollectionsTree();
+}
+
+// Scan all collections/folders for requests whose METHOD + URL match.
+// Returns [{ collectionId, folderId, request }] — empty if none.
+function findRequestsByUrlMethod(url, method) {
+  if (!url) return [];
+  const targetUrl = url.split('?')[0];
+  const targetMethod = (method || 'GET').toUpperCase();
+  const matches = [];
+  function walk(node, collId, folderId) {
+    for (const r of (node.requests || [])) {
+      if ((r.method || 'GET').toUpperCase() === targetMethod &&
+          (r.url || '').split('?')[0] === targetUrl) {
+        matches.push({ collectionId: collId, folderId, request: r });
+      }
+    }
+    for (const f of (node.folders || [])) walk(f, collId, f.id);
+  }
+  for (const coll of collections) walk(coll, coll.id, null);
+  return matches;
 }
 
 function isTabDirty() {
@@ -3408,6 +3609,7 @@ function isTabDirty() {
     current.bodyContent !== (saved.bodyContent || '') ||
     JSON.stringify(current.bodyFormData) !== JSON.stringify(saved.bodyFormData || []) ||
     current.preScript !== (saved.preScript || '') ||
+    current.postScript !== (saved.postScript || '') ||
     current.testScript !== (saved.testScript || '');
 }
 
@@ -3560,7 +3762,10 @@ function gatherCurrentRequest() {
       return clean;
     }),
     preScript,
+    postScript,
     testScript,
+    // Preserve imported OpenAPI docs (read-only metadata, captured at import time)
+    ...(currentRequestData && currentRequestData.docs ? { docs: currentRequestData.docs } : {}),
   };
 }
 
@@ -3962,8 +4167,10 @@ function populateFromEndpoint(ep) {
   renderBodyPanel();
 
   preScript = '';
+  postScript = '';
   testScript = '';
   renderScriptPanel('pre-script');
+  renderScriptPanel('post-script');
   renderScriptPanel('tests');
 
   currentCollectionPath = [];

@@ -4832,9 +4832,10 @@ a.af-row:hover .af-text { text-decoration: underline; }
 
 /* --- Collection/Folder Editor Modal --- */
 .api-coll-editor {
-  min-width: 560px;
-  max-width: 720px;
-  max-height: 80vh;
+  min-width: 720px;
+  max-width: 960px;
+  width: 80vw;
+  max-height: 85vh;
 }
 
 .api-coll-editor-tabs {
@@ -4862,11 +4863,15 @@ a.af-row:hover .af-text { text-decoration: underline; }
   padding: 16px;
   overflow-y: auto;
   flex: 1;
-  min-height: 200px;
-  max-height: 50vh;
+  min-height: 320px;
+  max-height: 70vh;
 }
 
-.api-coll-editor-pane { min-height: 160px; }
+.api-coll-editor-pane { min-height: 280px; }
+
+/* Script textareas inside the editor modal get more room than the tab-level
+   ones — the modal is a dedicated editing surface, not a side panel. */
+.api-coll-editor-pane .api-script-textarea { min-height: 320px; }
 
 .api-coll-editor-footer {
   display: flex;

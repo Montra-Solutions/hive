@@ -153,6 +153,7 @@
             <div class="api-sidebar-actions">
               <button class="btn btn-quick" id="api-new-collection">+ Collection</button>
               <button class="btn btn-quick" id="api-import-btn">Import</button>
+              <button class="btn btn-quick" id="api-reload-collections" title="Re-read collections from disk">Reload</button>
             </div>
             <div class="api-collections-search">
               <input type="text" id="api-collections-filter" placeholder="Filter requests..." />
@@ -218,6 +219,7 @@
                 <button class="api-tab" data-reqtab="auth">Auth</button>
                 <button class="api-tab" data-reqtab="body">Body</button>
                 <button class="api-tab" data-reqtab="pre-script">Pre-Script</button>
+                <button class="api-tab" data-reqtab="post-script">Post-Script</button>
                 <button class="api-tab" data-reqtab="tests">Tests</button>
               </div>
               <div class="api-tab-content" id="api-reqtab-docs" style="display:none"></div>
@@ -226,6 +228,7 @@
               <div class="api-tab-content" id="api-reqtab-auth" style="display:none"></div>
               <div class="api-tab-content" id="api-reqtab-body" style="display:none"></div>
               <div class="api-tab-content" id="api-reqtab-pre-script" style="display:none"></div>
+              <div class="api-tab-content" id="api-reqtab-post-script" style="display:none"></div>
               <div class="api-tab-content" id="api-reqtab-tests" style="display:none"></div>
             </div>
 
@@ -611,12 +614,14 @@
         <button class="api-coll-editor-tab active" data-cedtab="auth">Auth</button>
         <button class="api-coll-editor-tab" data-cedtab="variables">Variables</button>
         <button class="api-coll-editor-tab" data-cedtab="pre-script">Pre-Script</button>
+        <button class="api-coll-editor-tab" data-cedtab="post-script">Post-Script</button>
         <button class="api-coll-editor-tab" data-cedtab="tests">Tests</button>
       </div>
       <div class="api-coll-editor-body">
         <div class="api-coll-editor-pane" id="api-cedtab-auth"></div>
         <div class="api-coll-editor-pane" id="api-cedtab-variables" style="display:none"></div>
         <div class="api-coll-editor-pane" id="api-cedtab-pre-script" style="display:none"></div>
+        <div class="api-coll-editor-pane" id="api-cedtab-post-script" style="display:none"></div>
         <div class="api-coll-editor-pane" id="api-cedtab-tests" style="display:none"></div>
       </div>
       <div class="api-coll-editor-footer">
