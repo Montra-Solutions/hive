@@ -3543,9 +3543,10 @@ function saveCurrentRequest() {
     const matches = findRequestsByUrlMethod(url, method);
     if (matches.length === 1) {
       const m = matches[0];
-      currentCollectionPath = m.folderId
-        ? [m.collectionId, m.folderId, m.request.id]
-        : [m.collectionId, m.request.id];
+      const folderPath = Array.isArray(m.folderPath)
+        ? m.folderPath
+        : (m.folderId ? [m.folderId] : []);
+      currentCollectionPath = [m.collectionId, ...folderPath, m.request.id];
       currentRequestData = m.request;
       // fall through to the in-place save below
     } else {
