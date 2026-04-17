@@ -73,6 +73,52 @@ Browse your PostgreSQL databases directly in the dashboard — list schemas, tab
 ### API Collections
 A lightweight HTTP client built into the dashboard. Save requests as collections, set environment variables per environment (local/dev/prod), and run them without leaving the browser.
 
+**Scripts** — every request has three script slots (also available at the folder and collection level). They all expose the `pm.*` API:
+
+| Script | When it runs | Typical use |
+|---|---|---|
+| **Pre-Script** | Before the request is sent | Compute/sign timestamps, mutate headers/body, set variables the request will consume |
+| **Post-Script** | After the response arrives, **before** tests | Capture values from the response into variables for later requests (tokens, IDs) |
+| **Tests** | After Post-Script | Assertions about the response (`pm.test(...)` + `pm.expect(...)`) |
+
+**Execution walk** — pre: collection → folders (outer → inner) → request; post & tests: request → folders (inner → outer) → collection.
+
+**Variable scopes**:
+
+| Scope | Access | Persistence |
+|---|---|---|
+| `pm.variables` | session-scoped, in-memory | Survives across requests in the current tab/session; lost on page reload |
+| `pm.collectionVariables` | scoped to the owning collection | Persisted to `collections.json` |
+| `pm.environment` | scoped to the active environment | Persisted to the environment file |
+
+**Worked example — OAuth token (Production)**:
+
+```js
+// Post-Script on "1. OAuth Token (Production)"
+const data = pm.response.json();
+pm.environment.set('authToken', data.access_token);
+// Optional: session-only (not persisted to disk)
+// pm.variables.set('authToken', data.access_token);
+console.log('Token captured, expires in', data.expires_in, 's');
+```
+
+Subsequent requests reference `{{authToken}}` in headers (e.g. `Authorization: Bearer {{authToken}}`) or the URL. Hover any field with `{{var}}` syntax to see the resolved value and per-variable breakdown.
+
+**Auth types** — at request, folder, or collection level:
+
+| Type | What it sends |
+|---|---|
+| Bearer Token | `Authorization: Bearer <token>` |
+| Basic Auth | `Authorization: Basic base64(user:pass)` |
+| API Key | Custom header or query param (e.g. `X-API-KEY: <key>`) — choose name, value, and location |
+| Inherit | Walks up: folder (innermost first) → collection |
+
+Set it once at the collection level and leave child requests on **Inherit from Collection**. Common mistake: using *Basic Auth* for APIs that actually want a custom header like `X-API-KEY` — use the **API Key** type for those.
+
+**Reload** — click **Reload** above the collections tree to re-read `collections.json` from disk (useful after hand-editing the file or after another process updated it).
+
+**Imported OpenAPI docs** — requests imported from an OpenAPI spec keep their summary, description, parameters, and response schemas on the request itself. The **Docs** tab on each request renders them even after a page refresh, independent of any live swagger endpoint.
+
 ### Docs Viewer
 Render markdown documentation from any directory in your project. Browse your repo's docs, ADRs, or Obsidian vault without leaving the dashboard.
 

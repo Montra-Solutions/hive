@@ -832,8 +832,12 @@ const DEFAULT_ENVIRONMENTS = [
   function seedFields(node) {
     if (!Array.isArray(node.variables)) { node.variables = []; changed = true; }
     if (typeof node.preScript !== 'string') { node.preScript = ''; changed = true; }
+    if (typeof node.postScript !== 'string') { node.postScript = ''; changed = true; }
     if (typeof node.testScript !== 'string') { node.testScript = ''; changed = true; }
     for (const f of (node.folders || [])) seedFields(f);
+    for (const r of (node.requests || [])) {
+      if (typeof r.postScript !== 'string') { r.postScript = ''; changed = true; }
+    }
   }
 
   for (const coll of collections) seedFields(coll);
@@ -4514,6 +4518,7 @@ app.post('/api/collections/import', (req, res) => {
     auth: { type: 'bearer', bearer: '' },
     variables: [],
     preScript: '',
+    postScript: '',
     testScript: '',
     folders: [],
     requests: [],
@@ -4527,7 +4532,7 @@ app.post('/api/collections/import', (req, res) => {
       const tag = tags[0];
 
       if (!tagFolders[tag]) {
-        tagFolders[tag] = { id: 'fld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), name: tag, auth: { type: 'inherit' }, variables: [], preScript: '', testScript: '', folders: [], requests: [] };
+        tagFolders[tag] = { id: 'fld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), name: tag, auth: { type: 'inherit' }, variables: [], preScript: '', postScript: '', testScript: '', folders: [], requests: [] };
         collection.folders.push(tagFolders[tag]);
       }
 
@@ -4561,7 +4566,16 @@ app.post('/api/collections/import', (req, res) => {
         bodyMode: exampleBody ? 'json' : 'none',
         bodyContent: exampleBody,
         preScript: '',
+        postScript: '',
         testScript: '',
+        docs: {
+          summary: endpoint.summary || '',
+          description: endpoint.description || '',
+          parameters: endpoint.parameters || [],
+          requestBody: endpoint.requestBody || null,
+          responses: endpoint.responses || null,
+          tags: endpoint.tags || [],
+        },
       });
     }
   }
