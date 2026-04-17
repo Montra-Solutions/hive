@@ -1359,6 +1359,7 @@ function renderScriptPanel(tabId) {
       textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
       textarea.selectionStart = textarea.selectionEnd = start + 2;
       cfg.value = textarea.value;
+      markTabDirtyIfNeeded();
     }
   });
   panel.appendChild(textarea);
@@ -2470,12 +2471,24 @@ async function reloadCollectionsFromDisk() {
   const dirty = openTabs.some(t => t._dirty);
   if (dirty && !confirm('You have unsaved changes in one or more tabs. Reload collections from disk anyway?')) return;
   await loadCollections();
-  // Re-resolve current request from the freshly loaded collection (preserves open tab)
+  // Re-hydrate requestData for all open tabs so stale object references are
+  // replaced with the freshly loaded collection data.
+  for (const tab of openTabs) {
+    const path = tab.collectionPath || [];
+    if (path.length >= 2) {
+      const coll = collections.find(c => c.id === path[0]);
+      if (coll) {
+        const reqId = path[path.length - 1];
+        const fresh = findRequestInCollection(coll, reqId);
+        tab.requestData = fresh || null;
+      }
+    }
+  }
+  // Re-resolve current request data for the active tab.
   if (currentCollectionPath.length >= 2) {
-    const collId = currentCollectionPath[0];
-    const reqId = currentCollectionPath[currentCollectionPath.length - 1];
-    const coll = collections.find(c => c.id === collId);
+    const coll = collections.find(c => c.id === currentCollectionPath[0]);
     if (coll) {
+      const reqId = currentCollectionPath[currentCollectionPath.length - 1];
       const fresh = findRequestInCollection(coll, reqId);
       if (fresh) currentRequestData = fresh;
     }
@@ -3543,10 +3556,7 @@ function saveCurrentRequest() {
     const matches = findRequestsByUrlMethod(url, method);
     if (matches.length === 1) {
       const m = matches[0];
-      const folderPath = Array.isArray(m.folderPath)
-        ? m.folderPath
-        : (m.folderId ? [m.folderId] : []);
-      currentCollectionPath = [m.collectionId, ...folderPath, m.request.id];
+      currentCollectionPath = [m.collectionId, ...m.folderPath, m.request.id];
       currentRequestData = m.request;
       // fall through to the in-place save below
     } else {
@@ -3573,22 +3583,22 @@ function saveCurrentRequest() {
 }
 
 // Scan all collections/folders for requests whose METHOD + URL match.
-// Returns [{ collectionId, folderId, request }] — empty if none.
+// Returns [{ collectionId, folderPath, request }] — empty if none.
 function findRequestsByUrlMethod(url, method) {
   if (!url) return [];
   const targetUrl = url.split('?')[0];
   const targetMethod = (method || 'GET').toUpperCase();
   const matches = [];
-  function walk(node, collId, folderId) {
+  function walk(node, collId, folderPath) {
     for (const r of (node.requests || [])) {
       if ((r.method || 'GET').toUpperCase() === targetMethod &&
           (r.url || '').split('?')[0] === targetUrl) {
-        matches.push({ collectionId: collId, folderId, request: r });
+        matches.push({ collectionId: collId, folderPath, request: r });
       }
     }
-    for (const f of (node.folders || [])) walk(f, collId, f.id);
+    for (const f of (node.folders || [])) walk(f, collId, [...folderPath, f.id]);
   }
-  for (const coll of collections) walk(coll, coll.id, null);
+  for (const coll of collections) walk(coll, coll.id, []);
   return matches;
 }
 

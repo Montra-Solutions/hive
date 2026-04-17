@@ -4838,6 +4838,13 @@ a.af-row:hover .af-text { text-decoration: underline; }
   max-height: 85vh;
 }
 
+@media (max-width: 720px) {
+  .api-coll-editor {
+    min-width: unset;
+    width: 95vw;
+  }
+}
+
 .api-coll-editor-tabs {
   display: flex;
   gap: 0;
