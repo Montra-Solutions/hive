@@ -4536,20 +4536,27 @@ app.post('/api/collections/import', (req, res) => {
         collection.folders.push(tagFolders[tag]);
       }
 
+      // Resolve $ref pointers so stored docs contain concrete parameter/body/response objects.
+      // Without this, specs that use component refs (e.g. Pinpoint) store only {$ref: ...} stubs
+      // and the Docs panel renders blank name/in cells and empty request body / response schemas.
+      const parameters = dereferenceOpenApi(endpoint.parameters || [], spec);
+      const requestBody = dereferenceOpenApi(endpoint.requestBody || null, spec);
+      const responses = dereferenceOpenApi(endpoint.responses || null, spec);
+
       // Build example body from schema
       let exampleBody = '';
-      const reqBody = endpoint.requestBody?.content?.['application/json']?.schema;
-      if (reqBody) {
-        try { exampleBody = JSON.stringify(buildSchemaExample(reqBody, spec), null, 2); } catch { /* ignore */ }
+      const reqBodySchema = requestBody?.content?.['application/json']?.schema;
+      if (reqBodySchema) {
+        try { exampleBody = JSON.stringify(buildSchemaExample(reqBodySchema, spec), null, 2); } catch { /* ignore */ }
       }
 
       // Build params
-      const params = (endpoint.parameters || []).filter(p => p.in === 'query').map(p => ({
+      const params = parameters.filter(p => p && p.in === 'query').map(p => ({
         key: p.name, value: '', enabled: true, description: p.description || '',
       }));
 
       const headers = [];
-      const pathParams = (endpoint.parameters || []).filter(p => p.in === 'path');
+      const pathParams = parameters.filter(p => p && p.in === 'path');
       let resolvedPath = path;
       for (const pp of pathParams) {
         resolvedPath = resolvedPath.replace(`{${pp.name}}`, `{{${pp.name}}}`);
@@ -4571,9 +4578,9 @@ app.post('/api/collections/import', (req, res) => {
         docs: {
           summary: endpoint.summary || '',
           description: endpoint.description || '',
-          parameters: endpoint.parameters || [],
-          requestBody: endpoint.requestBody || null,
-          responses: endpoint.responses || null,
+          parameters,
+          requestBody,
+          responses,
           tags: endpoint.tags || [],
         },
       });
@@ -4774,6 +4781,39 @@ app.post('/api/collections/import-postman', (req, res) => {
   const totalRequests = collection.requests.length + collection.folders.reduce((sum, f) => sum + (f.requests?.length || 0), 0);
   res.json({ ...collection, _totalRequests: totalRequests });
 });
+
+// Resolve a single JSON Pointer ($ref) against the root OpenAPI spec.
+// Returns the referenced node, or null if it can't be resolved.
+function resolveJsonRef(ref, spec) {
+  if (typeof ref !== 'string' || !ref.startsWith('#/')) return null;
+  const segs = ref.slice(2).split('/').map(s => s.replace(/~1/g, '/').replace(/~0/g, '~'));
+  let node = spec;
+  for (const seg of segs) {
+    if (node == null || typeof node !== 'object') return null;
+    node = node[seg];
+  }
+  return node === undefined ? null : node;
+}
+
+// Recursively inline $ref pointers so stored documentation objects are self-contained.
+// Tracks a ref chain to break cycles (e.g. recursive schemas) and caps depth defensively.
+function dereferenceOpenApi(node, spec, seen = new Set(), depth = 0) {
+  if (depth > 40 || node == null || typeof node !== 'object') return node;
+  if (Array.isArray(node)) return node.map(item => dereferenceOpenApi(item, spec, seen, depth + 1));
+  if (typeof node.$ref === 'string') {
+    const ref = node.$ref;
+    if (seen.has(ref)) return {};
+    const resolved = resolveJsonRef(ref, spec);
+    if (resolved == null) return {};
+    const nextSeen = new Set(seen); nextSeen.add(ref);
+    return dereferenceOpenApi(resolved, spec, nextSeen, depth + 1);
+  }
+  const out = {};
+  for (const [k, v] of Object.entries(node)) {
+    out[k] = dereferenceOpenApi(v, spec, seen, depth + 1);
+  }
+  return out;
+}
 
 function buildSchemaExample(schema, spec, depth = 0) {
   if (depth > 5) return {};
