@@ -4550,11 +4550,22 @@ app.post('/api/collections/import', (req, res) => {
         try { exampleBody = JSON.stringify(buildSchemaExample(reqBodySchema, spec), null, 2); } catch { /* ignore */ }
       }
 
-      // Build params. Disable optional query params by default so a raw "Send"
-      // doesn't ship ~30+ empty ?fields[...]= pairs; users tick the ones they want.
-      const params = parameters.filter(p => p && p.in === 'query').map(p => ({
-        key: p.name, value: '', enabled: !!p.required, description: p.description || '',
-      }));
+      // Build params. The Params tab is a request-builder, not a doc surface —
+      // populate it only with params the spec marks as required or provides an
+      // example/examples/x-example for. The full parameter list lives in
+      // docs.parameters (rendered in the Docs tab).
+      const params = parameters
+        .filter(p => p && p.in === 'query')
+        .filter(p => !!p.required || extractExampleValue(p) !== undefined)
+        .map(p => {
+          const example = extractExampleValue(p);
+          return {
+            key: p.name,
+            value: example === undefined ? '' : example,
+            enabled: true,
+            description: p.description || '',
+          };
+        });
 
       const headers = [];
       const pathParams = parameters.filter(p => p && p.in === 'path');
@@ -4782,6 +4793,28 @@ app.post('/api/collections/import-postman', (req, res) => {
   const totalRequests = collection.requests.length + collection.folders.reduce((sum, f) => sum + (f.requests?.length || 0), 0);
   res.json({ ...collection, _totalRequests: totalRequests });
 });
+
+// Extract a string-representable example value from an OpenAPI parameter,
+// checking (in order) inline `example`, the first entry of `examples`,
+// `schema.example`, and the Swagger 2.0 `x-example` vendor extension.
+// Returns undefined when the parameter carries no example.
+function extractExampleValue(p) {
+  if (!p || typeof p !== 'object') return undefined;
+  const candidates = [
+    p.example,
+    p.examples && typeof p.examples === 'object' ? Object.values(p.examples)[0]?.value : undefined,
+    p.schema?.example,
+    p['x-example'],
+  ];
+  for (const v of candidates) {
+    if (v === undefined || v === null) continue;
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    if (Array.isArray(v)) return v.join(',');
+    try { return JSON.stringify(v); } catch { /* fall through */ }
+  }
+  return undefined;
+}
 
 // Resolve a single JSON Pointer ($ref) against the root OpenAPI spec.
 // Returns the referenced node, or null if it can't be resolved.
