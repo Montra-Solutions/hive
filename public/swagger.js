@@ -684,11 +684,13 @@ function renderDocsPanel() {
     return;
   }
 
-  // Prefer a live swaggerSpec match (populated by /api/swagger); fall back to
-  // docs captured at OpenAPI-import time on the request itself (so imported
-  // collections keep their docs after refresh when the live spec isn't loaded).
-  const liveMatch = swaggerSpec ? findSwaggerEndpoint(url, method) : null;
+  // Prefer docs captured at OpenAPI-import time on the request itself. Those are
+  // authoritative for imported collections (e.g. third-party APIs like Pinpoint)
+  // whose path might collide with a path in the locally-running swagger spec.
+  // Fall back to a live swaggerSpec match only when no stored docs exist (useful
+  // for ad-hoc requests typed into the URL bar against the local API).
   const storedDocs = currentRequestData && currentRequestData.docs;
+  const liveMatch = !storedDocs && swaggerSpec ? findSwaggerEndpoint(url, method) : null;
 
   if (!liveMatch && !storedDocs) {
     if (!swaggerSpec) {
@@ -702,8 +704,8 @@ function renderDocsPanel() {
     return;
   }
 
-  const ep = liveMatch ? liveMatch.endpoint : storedDocs;
-  const matchPath = liveMatch ? liveMatch.path : url;
+  const ep = storedDocs || liveMatch.endpoint;
+  const matchPath = liveMatch ? liveMatch.path : (url.replace(/^\{\{[^}]+\}\}/, '').split('?')[0] || url);
   const matchMethod = liveMatch ? liveMatch.method : (method || 'get').toLowerCase();
   let html = '<div class="api-docs-content">';
 
