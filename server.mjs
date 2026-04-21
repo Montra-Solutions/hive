@@ -4833,12 +4833,16 @@ function resolveJsonRef(ref, spec) {
 // Tracks a ref chain to break cycles (e.g. recursive schemas) and caps depth defensively.
 function dereferenceOpenApi(node, spec, seen = new Set(), depth = 0) {
   if (depth > 40 || node == null || typeof node !== 'object') return node;
-  if (Array.isArray(node)) return node.map(item => dereferenceOpenApi(item, spec, seen, depth + 1));
+  if (Array.isArray(node)) {
+    return node
+      .map(item => dereferenceOpenApi(item, spec, seen, depth + 1))
+      .filter(item => item != null);
+  }
   if (typeof node.$ref === 'string') {
     const ref = node.$ref;
-    if (seen.has(ref)) return {};
+    if (seen.has(ref)) return null;
     const resolved = resolveJsonRef(ref, spec);
-    if (resolved == null) return {};
+    if (resolved == null) return null;
     const nextSeen = new Set(seen); nextSeen.add(ref);
     return dereferenceOpenApi(resolved, spec, nextSeen, depth + 1);
   }
@@ -4852,9 +4856,7 @@ function dereferenceOpenApi(node, spec, seen = new Set(), depth = 0) {
 function buildSchemaExample(schema, spec, depth = 0) {
   if (depth > 5) return {};
   if (schema.$ref) {
-    const refPath = schema.$ref.replace('#/', '').split('/');
-    let resolved = spec;
-    for (const seg of refPath) resolved = resolved?.[seg];
+    const resolved = resolveJsonRef(schema.$ref, spec);
     if (resolved) return buildSchemaExample(resolved, spec, depth + 1);
     return {};
   }

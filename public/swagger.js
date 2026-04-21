@@ -687,9 +687,30 @@ function renderDocsPanel() {
   // Prefer docs captured at OpenAPI-import time on the request itself. Those are
   // authoritative for imported collections (e.g. third-party APIs like Pinpoint)
   // whose path might collide with a path in the locally-running swagger spec.
-  // Fall back to a live swaggerSpec match only when no stored docs exist (useful
-  // for ad-hoc requests typed into the URL bar against the local API).
-  const storedDocs = currentRequestData && currentRequestData.docs;
+  // Only treat storedDocs as authoritative when the current method + URL still
+  // match the loaded request's original values (after stripping baseUrl/query);
+  // otherwise fall back to a live swaggerSpec match.
+  function normalizeUrlPath(u) {
+    return (u || '')
+      .replace(/^\{\{[^}]+\}\}/, '')    // strip {{baseUrl}} prefix
+      .replace(/^https?:\/\/[^/]+/, '') // strip http://host:port
+      .split('?')[0];                   // strip query string
+  }
+  function urlPathMatchesTemplate(inputUrl, templateUrl) {
+    const inputSegs = normalizeUrlPath(inputUrl).split('/').filter(Boolean);
+    const tmplSegs = normalizeUrlPath(templateUrl).split('/').filter(Boolean);
+    if (inputSegs.length !== tmplSegs.length) return false;
+    return tmplSegs.every((seg, i) => {
+      if (seg.startsWith('{') && seg.endsWith('}')) return true;
+      if (seg.startsWith('{{') && seg.endsWith('}}')) return true;
+      if (inputSegs[i].startsWith('{{') && inputSegs[i].endsWith('}}')) return true;
+      return seg === inputSegs[i];
+    });
+  }
+  const inputsMatchStored = !!(currentRequestData &&
+    (currentRequestData.method || 'GET').toUpperCase() === (method || 'GET').toUpperCase() &&
+    urlPathMatchesTemplate(url, currentRequestData.url || ''));
+  const storedDocs = inputsMatchStored ? currentRequestData.docs : null;
   const liveMatch = !storedDocs && swaggerSpec ? findSwaggerEndpoint(url, method) : null;
 
   if (!liveMatch && !storedDocs) {
