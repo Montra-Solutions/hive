@@ -4550,9 +4550,10 @@ app.post('/api/collections/import', (req, res) => {
         try { exampleBody = JSON.stringify(buildSchemaExample(reqBodySchema, spec), null, 2); } catch { /* ignore */ }
       }
 
-      // Build params
+      // Build params. Disable optional query params by default so a raw "Send"
+      // doesn't ship ~30+ empty ?fields[...]= pairs; users tick the ones they want.
       const params = parameters.filter(p => p && p.in === 'query').map(p => ({
-        key: p.name, value: '', enabled: true, description: p.description || '',
+        key: p.name, value: '', enabled: !!p.required, description: p.description || '',
       }));
 
       const headers = [];
