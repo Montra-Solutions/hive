@@ -80,6 +80,15 @@ function initSwagger() {
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
       e.preventDefault();
       closeTab(activeTabIndex);
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      const bodyEl = document.getElementById('api-restab-body');
+      if (bodyEl && bodyEl._openSearch) {
+        e.preventDefault();
+        // Switch to the Body response tab if it is not already active
+        const bodyTabBtn = document.querySelector('.api-response-tabs .api-tab[data-restab="body"]');
+        if (bodyTabBtn && !bodyTabBtn.classList.contains('active')) bodyTabBtn.click();
+        bodyEl._openSearch();
+      }
     }
   });
 
@@ -2208,9 +2217,147 @@ function escJsonStr(str) {
   return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
 }
 
+// ---------------------------------------------------------------------------
+// JSONPath evaluator — subset: $, .key, ..key, [n], [*], [?(@.prop op val)]
+// ---------------------------------------------------------------------------
+function evalJsonPath(root, expr) {
+  expr = (expr || '').trim();
+  if (!expr.startsWith('$')) return [];
+
+  // Tokenise the path into an array of step descriptors
+  const steps = [];
+  let i = 1;
+  while (i < expr.length) {
+    if (expr[i] === '.') {
+      if (expr[i + 1] === '.') {
+        i += 2;
+        steps.push({ type: 'recurse' });
+        // Read the optional key/wildcard that immediately follows ".."
+        if (i < expr.length && expr[i] !== '.' && expr[i] !== '[') {
+          const m = expr.slice(i).match(/^[\w$*]+/);
+          if (m) {
+            steps.push(m[0] === '*' ? { type: 'wild' } : { type: 'key', k: m[0] });
+            i += m[0].length;
+          }
+        }
+      } else {
+        i++;
+        if (expr[i] === '*') {
+          steps.push({ type: 'wild' });
+          i++;
+        } else {
+          const m = expr.slice(i).match(/^[\w$]+/);
+          if (m) { steps.push({ type: 'key', k: m[0] }); i += m[0].length; }
+        }
+      }
+    } else if (expr[i] === '[') {
+      i++;
+      // Find the matching ']', respecting nested brackets
+      let depth = 1, j = i;
+      while (j < expr.length && depth > 0) {
+        if (expr[j] === '[') depth++;
+        else if (expr[j] === ']') depth--;
+        j++;
+      }
+      const inner = expr.slice(i, j - 1).trim();
+      i = j;
+      if (inner === '*') {
+        steps.push({ type: 'wild' });
+      } else if (/^-?\d+$/.test(inner)) {
+        steps.push({ type: 'idx', n: parseInt(inner, 10) });
+      } else if (inner.startsWith('?')) {
+        steps.push({ type: 'filter', src: inner.slice(1) });
+      } else {
+        const km = inner.match(/^['"](.+)['"]$/);
+        steps.push({ type: 'key', k: km ? km[1] : inner });
+      }
+    } else {
+      i++;
+    }
+  }
+
+  // Recursively collect every descendant node (used by the 'recurse' step)
+  function collectAll(node) {
+    const out = [node];
+    if (Array.isArray(node)) {
+      for (const el of node) out.push(...collectAll(el));
+    } else if (node !== null && typeof node === 'object') {
+      for (const v of Object.values(node)) out.push(...collectAll(v));
+    }
+    return out;
+  }
+
+  // Evaluate a simple filter expression like (@.prop), (@.prop == 'val')
+  function evalFilter(el, src) {
+    try {
+      const s = src.replace(/^\(|\)$/g, '').trim();
+      const propM = s.match(/^@\.([\w$]+)$/);
+      if (propM) return !!(el && el[propM[1]]);
+      const cmpM = s.match(/^@\.([\w$]+)\s*(===?|!==?|>=?|<=?)\s*(.+)$/);
+      if (cmpM) {
+        const [, prop, op, rhs] = cmpM;
+        const lval = el == null ? undefined : el[prop];
+        let rval;
+        const t = rhs.trim();
+        if (/^['"].*['"]$/.test(t)) rval = t.slice(1, -1);
+        else if (t === 'true') rval = true;
+        else if (t === 'false') rval = false;
+        else if (t === 'null') rval = null;
+        else rval = Number(t);
+        if (op === '==' || op === '===') return lval == rval;
+        if (op === '!=' || op === '!==') return lval != rval;
+        if (op === '>') return lval > rval;
+        if (op === '<') return lval < rval;
+        if (op === '>=') return lval >= rval;
+        if (op === '<=') return lval <= rval;
+      }
+    } catch { /* ignore */ }
+    return false;
+  }
+
+  // Apply a single step to an array of current nodes → new array of nodes
+  function applyStep(nodes, step) {
+    const out = [];
+    for (const node of nodes) {
+      if (step.type === 'key') {
+        if (node !== null && typeof node === 'object' && !Array.isArray(node) && node[step.k] !== undefined) {
+          out.push(node[step.k]);
+        }
+      } else if (step.type === 'wild') {
+        if (Array.isArray(node)) out.push(...node);
+        else if (node !== null && typeof node === 'object') out.push(...Object.values(node));
+      } else if (step.type === 'idx') {
+        if (Array.isArray(node)) {
+          const n = step.n < 0 ? node.length + step.n : step.n;
+          if (n >= 0 && n < node.length) out.push(node[n]);
+        }
+      } else if (step.type === 'filter') {
+        const arr = Array.isArray(node) ? node : (node !== null && typeof node === 'object' ? Object.values(node) : []);
+        for (const el of arr) { if (evalFilter(el, step.src)) out.push(el); }
+      } else if (step.type === 'recurse') {
+        out.push(...collectAll(node));
+      }
+    }
+    return out;
+  }
+
+  let nodes = [root];
+  for (const step of steps) {
+    nodes = applyStep(nodes, step);
+    if (nodes.length === 0) break;
+  }
+  return nodes;
+}
+
 function renderResponseBody(container, response) {
   container.innerHTML = '';
 
+  // Detect whether the response body is valid JSON up-front
+  let isJson = false;
+  let parsedJsonData;
+  try { parsedJsonData = JSON.parse(response.body); isJson = true; } catch { /* not JSON */ }
+
+  // ── Controls row ──────────────────────────────────────────────────────────
   const controls = document.createElement('div');
   controls.className = 'api-response-body-controls';
 
@@ -2230,19 +2377,310 @@ function renderResponseBody(container, response) {
     setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
   });
 
+  const searchToggleBtn = document.createElement('button');
+  searchToggleBtn.className = 'btn api-search-toggle-btn';
+  searchToggleBtn.title = 'Search (Ctrl+F / ⌘+F)';
+  searchToggleBtn.textContent = '🔍';
+
   controls.appendChild(prettyBtn);
   controls.appendChild(rawBtn);
   controls.appendChild(copyBtn);
+  const ctrlSpacer = document.createElement('span');
+  ctrlSpacer.style.flex = '1';
+  controls.appendChild(ctrlSpacer);
+  controls.appendChild(searchToggleBtn);
   container.appendChild(controls);
 
+  // ── JSONPath filter bar (JSON responses only) ─────────────────────────────
+  const jsonpathBar = document.createElement('div');
+  jsonpathBar.className = 'api-jsonpath-bar';
+  if (!isJson) jsonpathBar.style.display = 'none';
+
+  const jsonpathIcon = document.createElement('span');
+  jsonpathIcon.className = 'api-jsonpath-icon';
+  jsonpathIcon.textContent = '{}';
+
+  const jsonpathInput = document.createElement('input');
+  jsonpathInput.type = 'text';
+  jsonpathInput.placeholder = 'Filter using JSONPath (e.g. $.data[*].name)';
+  jsonpathInput.className = 'api-jsonpath-input';
+
+  const jsonpathStatus = document.createElement('span');
+  jsonpathStatus.className = 'api-jsonpath-status';
+
+  const jsonpathClearBtn = document.createElement('button');
+  jsonpathClearBtn.className = 'btn api-jsonpath-clear-btn';
+  jsonpathClearBtn.title = 'Clear filter';
+  jsonpathClearBtn.textContent = '×';
+  jsonpathClearBtn.style.display = 'none';
+
+  jsonpathBar.appendChild(jsonpathIcon);
+  jsonpathBar.appendChild(jsonpathInput);
+  jsonpathBar.appendChild(jsonpathStatus);
+  jsonpathBar.appendChild(jsonpathClearBtn);
+  container.appendChild(jsonpathBar);
+
+  // ── Search bar (hidden until Ctrl+F or 🔍 click) ──────────────────────────
+  const searchBar = document.createElement('div');
+  searchBar.className = 'api-response-search-bar';
+  searchBar.style.display = 'none';
+
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.placeholder = 'Find';
+  searchInput.className = 'api-search-input';
+  searchInput.setAttribute('aria-label', 'Search response');
+
+  const matchCaseBtn = document.createElement('button');
+  matchCaseBtn.className = 'btn api-search-opt-btn';
+  matchCaseBtn.title = 'Match Case';
+  matchCaseBtn.textContent = 'Aa';
+
+  const wholeWordBtn = document.createElement('button');
+  wholeWordBtn.className = 'btn api-search-opt-btn';
+  wholeWordBtn.title = 'Match Whole Word';
+  wholeWordBtn.innerHTML = '<u>ab</u>|';
+
+  const useRegexBtn = document.createElement('button');
+  useRegexBtn.className = 'btn api-search-opt-btn';
+  useRegexBtn.title = 'Use Regular Expression';
+  useRegexBtn.textContent = '.*';
+
+  const searchCountEl = document.createElement('span');
+  searchCountEl.className = 'api-search-count';
+
+  const prevMatchBtn = document.createElement('button');
+  prevMatchBtn.className = 'btn api-search-nav-btn';
+  prevMatchBtn.title = 'Previous Match (Shift+Enter)';
+  prevMatchBtn.innerHTML = '↑';
+  prevMatchBtn.disabled = true;
+
+  const nextMatchBtn = document.createElement('button');
+  nextMatchBtn.className = 'btn api-search-nav-btn';
+  nextMatchBtn.title = 'Next Match (Enter)';
+  nextMatchBtn.innerHTML = '↓';
+  nextMatchBtn.disabled = true;
+
+  const closeSearchBtn = document.createElement('button');
+  closeSearchBtn.className = 'btn api-search-close-btn';
+  closeSearchBtn.title = 'Close (Escape)';
+  closeSearchBtn.textContent = '×';
+
+  searchBar.appendChild(searchInput);
+  searchBar.appendChild(matchCaseBtn);
+  searchBar.appendChild(wholeWordBtn);
+  searchBar.appendChild(useRegexBtn);
+  searchBar.appendChild(searchCountEl);
+  searchBar.appendChild(prevMatchBtn);
+  searchBar.appendChild(nextMatchBtn);
+  searchBar.appendChild(closeSearchBtn);
+  container.appendChild(searchBar);
+
+  // ── Content area ──────────────────────────────────────────────────────────
   const content = document.createElement('div');
   content.className = 'api-response-body-content';
   container.appendChild(content);
 
+  // ── Search state ──────────────────────────────────────────────────────────
+  let searchMatches = [];
+  let searchMatchIndex = -1;
+  let matchCase = false;
+  let wholeWord = false;
+  let useRegex = false;
+  let jsonpathExpr = '';
+
+  function buildSearchRegex(term) {
+    if (!term) return null;
+    try {
+      let pattern = useRegex ? term : term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (wholeWord && !useRegex) pattern = `\\b${pattern}\\b`;
+      return new RegExp(pattern, matchCase ? 'g' : 'gi');
+    } catch { return null; }
+  }
+
+  // Walk the DOM tree, wrapping text-node matches in <mark> elements.
+  // Returns an array of every created <mark> element.
+  function highlightTextNodes(node, regex) {
+    const marks = [];
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      if (!text) return marks;
+      regex.lastIndex = 0;
+      if (!regex.test(text)) return marks;
+      const frag = document.createDocumentFragment();
+      let lastIdx = 0;
+      regex.lastIndex = 0;
+      let m;
+      while ((m = regex.exec(text)) !== null) {
+        if (m.index > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+        const mark = document.createElement('mark');
+        mark.className = 'api-search-highlight';
+        mark.textContent = m[0];
+        frag.appendChild(mark);
+        marks.push(mark);
+        lastIdx = m.index + m[0].length;
+        if (m[0].length === 0) { regex.lastIndex++; if (regex.lastIndex > text.length) break; }
+      }
+      if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+      node.parentNode.replaceChild(frag, node);
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      for (const child of Array.from(node.childNodes)) marks.push(...highlightTextNodes(child, regex));
+    }
+    return marks;
+  }
+
+  function applyHighlights() {
+    const term = searchInput.value;
+    searchMatches = [];
+    searchMatchIndex = -1;
+    if (!term) { searchCountEl.textContent = ''; updateNavState(); return; }
+    const regex = buildSearchRegex(term);
+    if (!regex) {
+      searchCountEl.textContent = 'Invalid regex';
+      searchInput.classList.add('api-search-no-results');
+      updateNavState();
+      return;
+    }
+    searchInput.classList.remove('api-search-no-results');
+    searchMatches = highlightTextNodes(content, regex);
+    if (searchMatches.length === 0) {
+      searchCountEl.textContent = 'No results';
+      searchInput.classList.add('api-search-no-results');
+    } else {
+      searchInput.classList.remove('api-search-no-results');
+      navigateTo(0);
+    }
+    updateNavState();
+  }
+
+  function navigateTo(idx) {
+    if (searchMatches.length === 0) return;
+    if (searchMatchIndex >= 0 && searchMatchIndex < searchMatches.length) {
+      searchMatches[searchMatchIndex].classList.remove('current');
+    }
+    searchMatchIndex = ((idx % searchMatches.length) + searchMatches.length) % searchMatches.length;
+    searchMatches[searchMatchIndex].classList.add('current');
+    searchMatches[searchMatchIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    searchCountEl.textContent = `${searchMatchIndex + 1} of ${searchMatches.length}`;
+  }
+
+  function updateNavState() {
+    const has = searchMatches.length > 0;
+    prevMatchBtn.disabled = !has;
+    nextMatchBtn.disabled = !has;
+  }
+
+  function openSearch() {
+    searchBar.style.display = '';
+    searchInput.focus();
+    searchInput.select();
+  }
+
+  function closeSearch() {
+    searchBar.style.display = 'none';
+    searchInput.value = '';
+    searchCountEl.textContent = '';
+    searchMatches = [];
+    searchMatchIndex = -1;
+    render();
+  }
+
+  // Expose openSearch on the container element so the global Ctrl+F handler can find it
+  container._openSearch = openSearch;
+
+  searchToggleBtn.addEventListener('click', () => {
+    if (searchBar.style.display === 'none') openSearch();
+    else closeSearch();
+  });
+
+  closeSearchBtn.addEventListener('click', closeSearch);
+
+  searchInput.addEventListener('input', () => {
+    render();
+    if (searchInput.value) applyHighlights();
+    else { searchCountEl.textContent = ''; updateNavState(); }
+  });
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) navigateTo(searchMatchIndex - 1);
+      else navigateTo(searchMatchIndex + 1);
+    } else if (e.key === 'Escape') {
+      closeSearch();
+    }
+  });
+
+  matchCaseBtn.addEventListener('click', () => {
+    matchCase = !matchCase;
+    matchCaseBtn.classList.toggle('active', matchCase);
+    if (searchInput.value) { render(); applyHighlights(); }
+  });
+
+  wholeWordBtn.addEventListener('click', () => {
+    wholeWord = !wholeWord;
+    wholeWordBtn.classList.toggle('active', wholeWord);
+    if (searchInput.value) { render(); applyHighlights(); }
+  });
+
+  useRegexBtn.addEventListener('click', () => {
+    useRegex = !useRegex;
+    useRegexBtn.classList.toggle('active', useRegex);
+    if (searchInput.value) { render(); applyHighlights(); }
+  });
+
+  nextMatchBtn.addEventListener('click', () => navigateTo(searchMatchIndex + 1));
+  prevMatchBtn.addEventListener('click', () => navigateTo(searchMatchIndex - 1));
+
+  // ── JSONPath filter events ─────────────────────────────────────────────────
+  function applyJsonpathAndHighlight() {
+    render();
+    if (searchInput.value && searchBar.style.display !== 'none') applyHighlights();
+  }
+
+  jsonpathInput.addEventListener('input', () => {
+    jsonpathExpr = jsonpathInput.value.trim();
+    jsonpathClearBtn.style.display = jsonpathExpr ? '' : 'none';
+    applyJsonpathAndHighlight();
+  });
+
+  jsonpathInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      jsonpathInput.value = '';
+      jsonpathExpr = '';
+      jsonpathClearBtn.style.display = 'none';
+      jsonpathStatus.textContent = '';
+      applyJsonpathAndHighlight();
+    }
+  });
+
+  jsonpathClearBtn.addEventListener('click', () => {
+    jsonpathInput.value = '';
+    jsonpathExpr = '';
+    jsonpathClearBtn.style.display = 'none';
+    jsonpathStatus.textContent = '';
+    applyJsonpathAndHighlight();
+  });
+
+  // ── Main render function ───────────────────────────────────────────────────
   function render() {
     if (viewMode === 'pretty') {
       try {
-        const parsed = JSON.parse(response.body);
+        let parsed = JSON.parse(response.body);
+        if (jsonpathExpr && isJson) {
+          const results = evalJsonPath(parsed, jsonpathExpr);
+          if (results.length === 0) {
+            content.innerHTML = '<span style="color:var(--overlay0);font-style:italic;font-size:11px">No results match the JSONPath expression.</span>';
+            jsonpathStatus.textContent = '0 results';
+            jsonpathStatus.style.color = 'var(--red)';
+            return;
+          }
+          jsonpathStatus.textContent = `${results.length} result${results.length !== 1 ? 's' : ''}`;
+          jsonpathStatus.style.color = 'var(--green)';
+          parsed = results.length === 1 ? results[0] : results;
+        } else {
+          jsonpathStatus.textContent = '';
+        }
         const pre = document.createElement('pre');
         pre.className = 'json-collapsible';
         renderCollapsibleJson(pre, parsed);
@@ -2250,9 +2688,11 @@ function renderResponseBody(container, response) {
         content.appendChild(pre);
       } catch {
         content.textContent = response.body || '';
+        jsonpathStatus.textContent = '';
       }
     } else {
       content.textContent = response.body || '';
+      jsonpathStatus.textContent = '';
     }
   }
 
@@ -2261,6 +2701,7 @@ function renderResponseBody(container, response) {
     prettyBtn.classList.add('active');
     rawBtn.classList.remove('active');
     render();
+    if (searchInput.value && searchBar.style.display !== 'none') applyHighlights();
   });
 
   rawBtn.addEventListener('click', () => {
@@ -2268,6 +2709,7 @@ function renderResponseBody(container, response) {
     rawBtn.classList.add('active');
     prettyBtn.classList.remove('active');
     render();
+    if (searchInput.value && searchBar.style.display !== 'none') applyHighlights();
   });
 
   render();
