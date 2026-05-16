@@ -4086,6 +4086,18 @@ a.af-row:hover .af-text { text-decoration: underline; }
   grid-template-columns: 16px 28px 64px 1fr 1fr 28px;
 }
 
+.api-kv-row.has-extra-action {
+  grid-template-columns: 16px 28px 1fr 1fr 24px 28px;
+}
+
+.api-kv-row.has-desc.has-extra-action {
+  grid-template-columns: 16px 28px 1fr 1fr 1fr 24px 28px;
+}
+
+.api-kv-row.has-type.has-extra-action {
+  grid-template-columns: 16px 28px 64px 1fr 1fr 24px 28px;
+}
+
 .api-kv-type-select {
   padding: 3px 4px;
   border: 1px solid var(--surface1);
@@ -4173,6 +4185,32 @@ a.af-row:hover .af-text { text-decoration: underline; }
 .api-kv-input:focus { border-color: var(--blue); }
 
 .api-kv-input::placeholder { color: var(--surface2); }
+
+.api-kv-duplicate {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--surface1);
+  background: var(--surface0);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  padding: 0;
+}
+
+.api-kv-duplicate:hover:not(:disabled) {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.api-kv-duplicate:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 
 .api-kv-delete {
   width: 20px;

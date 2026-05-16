@@ -33,6 +33,8 @@ Hit **Send** or press the send button to execute. The response panel shows body,
 
 If your URL contains `:paramName`, the client extracts it automatically and shows an editable field. For example, `/users/:userId/posts` creates a `userId` field you can fill in.
 
+Use the `+` button beside a path variable to keep multiple values for the same variable, then check the row you want active. Only the active row is substituted when the request is sent.
+
 ### Request Timeout
 
 Configurable from 30 seconds to 10 minutes. The server enforces this with `AbortSignal.timeout()` — if the target API doesn't respond in time, the proxy aborts and returns an error.
