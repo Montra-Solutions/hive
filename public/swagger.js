@@ -832,7 +832,15 @@ function renderDocsPanel() {
 function renderKeyValueEditor(containerId, rows, options = {}) {
   const container = document.getElementById(containerId);
   if (!container) return;
-  const { onChange, hasDescription, hasTypeSelect, readOnlyKeys } = options;
+  const {
+    onChange,
+    hasDescription,
+    hasTypeSelect,
+    readOnlyKeys,
+    allowTrailingEmpty = true,
+    canDuplicateRows,
+    enforceSingleEnabledByKey,
+  } = options;
 
   container.innerHTML = '';
   const wrapper = document.createElement('div');
@@ -845,6 +853,7 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
     let cls = 'api-kv-row';
     if (hasDescription) cls += ' has-desc';
     if (hasTypeSelect) cls += ' has-type';
+    if (canDuplicateRows) cls += ' has-extra-action';
     div.className = cls;
     div.dataset.idx = idx;
 
@@ -883,7 +892,21 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
     check.type = 'checkbox';
     check.className = 'api-kv-check';
     check.checked = row.enabled !== false;
-    check.addEventListener('change', () => { row.enabled = check.checked; if (onChange) onChange(rows); markTabDirtyIfNeeded(); });
+    check.addEventListener('change', () => {
+      row.enabled = check.checked;
+      let needsRender = false;
+      if (enforceSingleEnabledByKey && row.enabled && row.key) {
+        for (const other of rows) {
+          if (other !== row && other.key === row.key && other.enabled !== false) {
+            other.enabled = false;
+            needsRender = true;
+          }
+        }
+      }
+      if (onChange) onChange(rows);
+      markTabDirtyIfNeeded();
+      if (needsRender) renderKeyValueEditor(containerId, rows, options);
+    });
 
     div.appendChild(grip);
     div.appendChild(check);
@@ -995,12 +1018,33 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
       div.appendChild(descInput);
     }
 
+    if (canDuplicateRows) {
+      const dup = document.createElement('button');
+      dup.className = 'api-kv-duplicate';
+      dup.type = 'button';
+      dup.textContent = '+';
+      dup.title = row.key ? `Add another value for ${row.key}` : 'Add another value';
+      dup.disabled = !row.key;
+      dup.addEventListener('click', () => {
+        rows.splice(idx + 1, 0, {
+          key: row.key,
+          value: '',
+          description: '',
+          enabled: false,
+        });
+        renderKeyValueEditor(containerId, rows, options);
+        if (onChange) onChange(rows);
+        markTabDirtyIfNeeded();
+      });
+      div.appendChild(dup);
+    }
+
     const del = document.createElement('button');
     del.className = 'api-kv-delete';
     del.innerHTML = '&times;';
     del.addEventListener('click', () => {
       rows.splice(idx, 1);
-      if (rows.length === 0) rows.push({ key: '', value: '', enabled: false });
+      if (allowTrailingEmpty && rows.length === 0) rows.push({ key: '', value: '', enabled: false });
       renderKeyValueEditor(containerId, rows, options);
       if (onChange) onChange(rows);
       markTabDirtyIfNeeded();
@@ -1024,9 +1068,11 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
   }
 
   // Always ensure a trailing empty row for easy entry
-  const last = rows[rows.length - 1];
-  if (!last || last.key || last.value) {
-    rows.push({ key: '', value: '', enabled: false });
+  if (allowTrailingEmpty) {
+    const last = rows[rows.length - 1];
+    if (!last || last.key || last.value) {
+      rows.push({ key: '', value: '', enabled: false });
+    }
   }
 
   for (let i = 0; i < rows.length; i++) {
@@ -1077,8 +1123,14 @@ function renderParamsEditor() {
 
     renderKeyValueEditor('api-params-pathvars', pathVarsRows, {
       hasDescription: true,
-      onChange: () => { markTabDirtyIfNeeded(); },
+      onChange: () => {
+        syncUrlToPathVars();
+        markTabDirtyIfNeeded();
+      },
       readOnlyKeys: true,
+      allowTrailingEmpty: false,
+      canDuplicateRows: true,
+      enforceSingleEnabledByKey: true,
     });
   }
 }
@@ -1101,9 +1153,7 @@ function syncParamsToUrl() {
   suppressUrlSync = false;
 }
 
-// Extract :param tokens from URL path and sync to pathVarsRows
-function syncUrlToPathVars() {
-  const url = document.getElementById('api-url').value;
+function extractPathVarNames(url = document.getElementById('api-url').value) {
   const qIdx = url.indexOf('?');
   const path = qIdx >= 0 ? url.substring(0, qIdx) : url;
 
@@ -1113,21 +1163,54 @@ function syncUrlToPathVars() {
     if (!paramNames.includes(name)) paramNames.push(name);
   });
 
-  // Build new pathVarsRows, preserving existing values
-  const oldMap = {};
-  for (const row of pathVarsRows) {
-    if (row.key) oldMap[row.key] = row;
+  return paramNames;
+}
+
+function pathVarRowsEqual(a, b) {
+  if (a.length !== b.length) return false;
+  return a.every((row, idx) => {
+    const other = b[idx] || {};
+    const enabled = row.enabled !== false;
+    const otherEnabled = other.enabled !== false;
+    return row.key === other.key &&
+      (row.value || '') === (other.value || '') &&
+      (row.description || '') === (other.description || '') &&
+      enabled === otherEnabled;
+  });
+}
+
+// Extract :param tokens from URL path and sync to pathVarsRows.
+// Duplicate declarations are preserved so users can keep several candidate
+// values for the same token and enable the one they want to send.
+function syncUrlToPathVars() {
+  const paramNames = extractPathVarNames();
+  const allowed = new Set(paramNames);
+
+  const existingRows = pathVarsRows
+    .filter(row => row.key && allowed.has(row.key))
+    .map(row => ({ ...row }));
+
+  const newRows = [];
+  for (const name of paramNames) {
+    const matches = existingRows.filter(row => row.key === name);
+    if (matches.length > 0) {
+      newRows.push(...matches);
+    } else {
+      newRows.push({ key: name, value: '', description: '', enabled: true });
+    }
   }
 
-  const newRows = paramNames.map(name => ({
-    key: name,
-    value: oldMap[name] ? oldMap[name].value : '',
-    description: oldMap[name] ? oldMap[name].description : '',
-    enabled: true,
-  }));
+  const activeKeys = new Set();
+  for (const row of newRows) {
+    if (!row.key || row.enabled === false) continue;
+    if (activeKeys.has(row.key)) {
+      row.enabled = false;
+    } else {
+      activeKeys.add(row.key);
+    }
+  }
 
-  const changed = newRows.length !== pathVarsRows.length ||
-    newRows.some((r, i) => r.key !== (pathVarsRows[i] || {}).key);
+  const changed = !pathVarRowsEqual(newRows, pathVarsRows);
 
   pathVarsRows = newRows;
   if (changed) renderParamsEditor();
