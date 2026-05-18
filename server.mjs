@@ -996,6 +996,125 @@ app.get('/api/repos/:repo/filemtime', (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Git: line-by-line blame (GitLens-style "current line" info)
+// When body includes { content }, pipe it through `git blame --contents -` so
+// unsaved buffer edits stay accurate (added lines show as "Not Committed Yet",
+// existing lines still resolve to their original commits).
+// ---------------------------------------------------------------------------
+app.post('/api/repos/:repo/blame', express.json({ limit: '10mb' }), (req, res) => {
+  const repo = req.params.repo;
+  if (!REPOS.includes(repo)) return res.status(400).json({ error: 'invalid repo' });
+  const { path: filePath, content } = req.body || {};
+  if (!filePath) return res.status(400).json({ error: 'path required' });
+  const base = repoDir(repo);
+  const fullPath = normalize(join(base, filePath));
+  if (!fullPath.startsWith(normalize(base))) return res.status(400).json({ error: 'invalid path' });
+  if (!existsSync(join(base, '.git'))) return res.status(404).json({ error: 'repo not found' });
+
+  const useBuffer = typeof content === 'string';
+  const args = useBuffer
+    ? ['blame', '--porcelain', '--contents', '-', '--', filePath]
+    : ['blame', '--porcelain', '--', filePath];
+
+  const out = [];
+  const err = [];
+  const proc = spawn('git', args, {
+    cwd: base,
+    stdio: [useBuffer ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+  });
+  const timer = setTimeout(() => { try { proc.kill(); } catch {} }, 10000);
+
+  proc.stdout.on('data', d => out.push(d));
+  proc.stderr.on('data', d => err.push(d));
+  proc.on('error', e => {
+    clearTimeout(timer);
+    if (!res.headersSent) res.json({ lines: {}, dirty: useBuffer, error: e.message });
+  });
+  proc.on('close', code => {
+    clearTimeout(timer);
+    if (code !== 0 && out.length === 0) {
+      // Untracked file, outside repo, etc. — soft-fail so the client can just hide the decoration.
+      const msg = Buffer.concat(err).toString('utf-8').trim();
+      return res.json({ lines: {}, dirty: useBuffer, error: msg || 'git blame failed' });
+    }
+    try {
+      const lines = parseBlamePorcelain(Buffer.concat(out).toString('utf-8'));
+      res.json({ lines, dirty: useBuffer });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  if (useBuffer) {
+    proc.stdin.on('error', () => {}); // swallow EPIPE
+    proc.stdin.end(content, 'utf-8');
+  }
+});
+
+function parseBlamePorcelain(raw) {
+  // Porcelain format:
+  //   <sha> <origLine> <finalLine> [<groupSize>]         ← header, every line
+  //   author <name>                                      ← metadata block, only
+  //   author-mail <email>                                  on first occurrence
+  //   author-time <unix>                                   of each commit
+  //   ...                                                  (summary, filename, etc.)
+  //   \t<source-line>                                    ← terminates the block
+  //
+  // Subsequent lines from the same commit have only the header and \t<source>.
+  const commits = {};    // sha → cached metadata
+  const lineMap = {};    // finalLine → { sha, author, authorTime, summary, isUncommitted }
+  const lines = raw.split('\n');
+  let i = 0;
+
+  while (i < lines.length) {
+    const m = /^([0-9a-f]{40})\s+(\d+)\s+(\d+)(?:\s+\d+)?$/.exec(lines[i]);
+    if (!m) { i++; continue; }
+    const sha = m[1];
+    const finalLine = parseInt(m[3], 10);
+    i++;
+
+    // If this commit was already described, just skip to the \t<source> line.
+    if (commits[sha]) {
+      while (i < lines.length && !lines[i].startsWith('\t')) i++;
+      lineMap[finalLine] = { ...commits[sha], sha };
+      i++; // consume \t<source>
+      continue;
+    }
+
+    // First sighting — collect metadata until \t<source>.
+    const meta = {};
+    while (i < lines.length && !lines[i].startsWith('\t')) {
+      const sp = lines[i].indexOf(' ');
+      const key = sp === -1 ? lines[i] : lines[i].slice(0, sp);
+      const val = sp === -1 ? '' : lines[i].slice(sp + 1);
+      if (key === 'author')           meta.author = val;
+      else if (key === 'author-mail') meta.authorMail = val.replace(/^<|>$/g, '');
+      else if (key === 'author-time') meta.authorTime = parseInt(val, 10);
+      else if (key === 'summary')     meta.summary = val;
+      i++;
+    }
+    const isUncommitted = /^0{40}$/.test(sha);
+    if (isUncommitted) {
+      // Git reports "Not Committed Yet" for working-tree changes and
+      // "External file (--contents)" when blame read from stdin. Normalize.
+      meta.author = 'You';
+      meta.summary = 'Uncommitted changes';
+    }
+    commits[sha] = {
+      author: meta.author,
+      authorMail: meta.authorMail,
+      authorTime: meta.authorTime,
+      summary: meta.summary,
+      isUncommitted,
+    };
+    lineMap[finalLine] = { ...commits[sha], sha };
+    i++; // consume \t<source>
+  }
+
+  return lineMap;
+}
+
 app.post('/api/repos/:repo/file', express.json({ limit: '10mb' }), (req, res) => {
   const repo = req.params.repo;
   if (!REPOS.includes(repo)) return res.status(400).json({ error: 'invalid repo' });

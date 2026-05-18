@@ -7392,6 +7392,17 @@ details.settings-section[open] > .settings-section-header::before {
 .repo-indent-select:focus { border-color: var(--blue); color: var(--text); }
 .repo-indent-select option { background: var(--mantle); color: var(--text); }
 
+/* Monaco inline blame hint — matches the inlayHint palette so it reads as
+   editor chrome rather than user content. */
+.blame-line-info {
+  color: var(--overlay0, #6c7086) !important;
+  font-style: italic;
+  opacity: 0.8;
+  font-weight: normal;
+  white-space: pre;
+  pointer-events: none;
+}
+
 .repo-editor-wrap {
   flex: 1;
   position: relative;
