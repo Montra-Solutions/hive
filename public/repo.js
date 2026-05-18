@@ -28,6 +28,105 @@ const INDENT_PRESETS = {
 let repoIndent = localStorage.getItem('repoIndent') || '2s';
 
 // ---------------------------------------------------------------------------
+// Git blame — GitLens-style current-line info rendered as an inline decoration
+// ---------------------------------------------------------------------------
+let repoBlameEnabled = localStorage.getItem('repoBlameEnabled') !== 'off'; // default on
+let _blameDecoIds    = [];          // Monaco decoration IDs for the active-line hint
+let _blameDebounceId = null;        // pending re-blame after content changes
+const BLAME_MAX_LINES = 5000;       // skip huge files — blame is O(history × lines)
+
+function relativeDate(unixTs) {
+  if (!unixTs) return '';
+  const diff = Date.now() / 1000 - unixTs;
+  if (diff < 60)            return 'just now';
+  if (diff < 3600)          return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400)         return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400 * 7)     return `${Math.floor(diff / 86400)}d ago`;
+  if (diff < 86400 * 30)    return `${Math.floor(diff / 86400 / 7)}w ago`;
+  if (diff < 86400 * 365)   return `${Math.floor(diff / 86400 / 30)}mo ago`;
+  return `${Math.floor(diff / 86400 / 365)}y ago`;
+}
+
+async function fetchBlame(tab, { withBuffer = false } = {}) {
+  if (!tab || !repoBlameEnabled) return;
+  const body = { path: tab.path };
+  if (withBuffer && monacoEditor && tab.model) {
+    const lineCount = tab.model.getLineCount();
+    if (lineCount > BLAME_MAX_LINES) { tab.blame = null; return; }
+    body.content = tab.model.getValue();
+  } else {
+    // On disk-mode, check line count from content if we have it cached.
+    if (tab.content && tab.content.split('\n').length > BLAME_MAX_LINES) { tab.blame = null; return; }
+  }
+  try {
+    const resp = await fetch(`/api/repos/${encodeURIComponent(tab.repo)}/blame`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) { tab.blame = null; return; }
+    const { lines, error } = await resp.json();
+    if (error || !lines) { tab.blame = null; return; }
+    tab.blame = lines;
+    // Re-render for the currently active line if this tab is active.
+    if (repoTabs[activeRepoTab] === tab) renderActiveLineBlame();
+  } catch {
+    tab.blame = null;
+  }
+}
+
+function clearBlameDecoration() {
+  if (monacoEditor && _blameDecoIds.length) {
+    _blameDecoIds = monacoEditor.deltaDecorations(_blameDecoIds, []);
+  }
+}
+
+function renderActiveLineBlame() {
+  if (!monacoEditor) return;
+  if (!repoBlameEnabled) { clearBlameDecoration(); return; }
+  const tab = repoTabs[activeRepoTab];
+  if (!tab || !tab.blame) { clearBlameDecoration(); return; }
+  const model = monacoEditor.getModel();
+  if (!model || model !== tab.model) { clearBlameDecoration(); return; }
+
+  const pos = monacoEditor.getPosition();
+  if (!pos) { clearBlameDecoration(); return; }
+  const info = tab.blame[pos.lineNumber];
+  if (!info) { clearBlameDecoration(); return; }
+
+  const author = info.author || 'Unknown';
+  const when   = info.isUncommitted ? '' : relativeDate(info.authorTime);
+  const summary = info.summary ? ` • ${info.summary}` : '';
+  const text   = info.isUncommitted
+    ? `    ${author}, uncommitted${summary}`
+    : `    ${author}, ${when}${summary}`;
+
+  const lineLen = model.getLineLength(pos.lineNumber);
+  const range = new monaco.Range(pos.lineNumber, lineLen + 1, pos.lineNumber, lineLen + 1);
+  _blameDecoIds = monacoEditor.deltaDecorations(_blameDecoIds, [{
+    range,
+    options: {
+      description: 'git-blame-line',
+      after: {
+        content: text,
+        inlineClassName: 'blame-line-info',
+      },
+      showIfCollapsed: false,
+    },
+  }]);
+}
+
+function scheduleBlameRefresh() {
+  if (!repoBlameEnabled) return;
+  if (_blameDebounceId) clearTimeout(_blameDebounceId);
+  _blameDebounceId = setTimeout(() => {
+    _blameDebounceId = null;
+    const tab = repoTabs[activeRepoTab];
+    if (tab) fetchBlame(tab, { withBuffer: true });
+  }, 800);
+}
+
+// ---------------------------------------------------------------------------
 // Language map
 // ---------------------------------------------------------------------------
 const EXT_LANG = {
@@ -192,13 +291,19 @@ function initMonacoEditor() {
   // Ctrl+P — Quick Open in file mode
   monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => openQuickOpen('file'));
 
-  // Track dirty state per tab
+  // Track dirty state per tab + schedule blame refresh against the live buffer
   monacoEditor.onDidChangeModelContent(() => {
     const tab = repoTabs[activeRepoTab];
-    if (!tab || tab.dirty) return;
-    tab.dirty = true;
-    renderRepoTabBar();
+    if (!tab) return;
+    if (!tab.dirty) {
+      tab.dirty = true;
+      renderRepoTabBar();
+    }
+    scheduleBlameRefresh();
   });
+
+  // Move the blame hint to the current line as the cursor moves
+  monacoEditor.onDidChangeCursorPosition(() => renderActiveLineBlame());
 
   registerAiCompletions();
 }
@@ -1211,6 +1316,18 @@ async function setActiveRepoTab(idx) {
     document.querySelectorAll('.repo-tree-item').forEach(el => {
       el.classList.toggle('active', el.dataset.path === tab.path && el.dataset.type === 'file');
     });
+
+    // Blame: render from cache immediately if we have it; otherwise fetch.
+    // If the buffer is dirty, always refetch against the buffer so shifted
+    // line numbers stay accurate.
+    clearBlameDecoration();
+    if (repoBlameEnabled) {
+      if (tab.blame && !tab.dirty) {
+        renderActiveLineBlame();
+      } else {
+        fetchBlame(tab, { withBuffer: !!tab.dirty });
+      }
+    }
   });
 
   persistRepoTabs();
@@ -1253,6 +1370,10 @@ async function saveCurrentFile() {
     tab.mtime   = mtime ?? null;
     renderRepoTabBar();
     showToast(`Saved ${tab.path.split('/').pop()}`, 'success');
+    // Disk changed — re-blame against disk so "Uncommitted" markers on saved-
+    // but-uncommitted lines stay correct (they'll still be 000...; the summary
+    // comes through as "Uncommitted changes" from our parser).
+    fetchBlame(tab, { withBuffer: false });
   } catch {
     showToast('Save failed', 'error');
   }
@@ -1358,6 +1479,26 @@ function renderRepoTabBar() {
         wrapBtn.classList.toggle('active', repoWordWrap);
       });
       toolbar.appendChild(wrapBtn);
+
+      // Blame toggle
+      const blameBtn = document.createElement('button');
+      blameBtn.id        = 'repo-blame-btn';
+      blameBtn.className = 'repo-toolbar-btn' + (repoBlameEnabled ? ' active' : '');
+      blameBtn.title     = 'Toggle current-line git blame';
+      blameBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M3 12h6m6 0h6"/></svg>Blame`;
+      blameBtn.addEventListener('click', () => {
+        repoBlameEnabled = !repoBlameEnabled;
+        localStorage.setItem('repoBlameEnabled', repoBlameEnabled ? 'on' : 'off');
+        blameBtn.classList.toggle('active', repoBlameEnabled);
+        const tab = repoTabs[activeRepoTab];
+        if (!repoBlameEnabled) {
+          clearBlameDecoration();
+        } else if (tab) {
+          if (tab.blame) renderActiveLineBlame();
+          else fetchBlame(tab, { withBuffer: !!tab.dirty });
+        }
+      });
+      toolbar.appendChild(blameBtn);
 
       // MD preview toggle (markdown files only)
       const activeTab = repoTabs[activeRepoTab];
