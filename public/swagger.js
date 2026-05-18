@@ -849,6 +849,7 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
     allowTrailingEmpty = true,
     canDuplicateRows,
     enforceSingleEnabledByKey,
+    highlightWhenEmpty,
   } = options;
 
   container.innerHTML = '';
@@ -856,6 +857,13 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
   wrapper.className = 'api-kv-editor';
 
   let dragSrcIdx = null;
+
+  function applyEmptyHighlight(div, row) {
+    if (!highlightWhenEmpty) return;
+    const isEnabled = row.enabled !== false;
+    const isEmpty = !(row.value || '').trim();
+    div.classList.toggle('needs-value', isEnabled && isEmpty && !!row.key);
+  }
 
   function buildRow(row, idx) {
     const div = document.createElement('div');
@@ -865,6 +873,7 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
     if (canDuplicateRows) cls += ' has-extra-action';
     div.className = cls;
     div.dataset.idx = idx;
+    applyEmptyHighlight(div, row);
 
     // Drag-to-reorder (handle-only — set draggable only while grip is held)
     div.addEventListener('dragstart', (e) => {
@@ -912,6 +921,7 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
           }
         }
       }
+      applyEmptyHighlight(div, row);
       if (onChange) onChange(rows);
       markTabDirtyIfNeeded();
       if (needsRender) renderKeyValueEditor(containerId, rows, options);
@@ -1010,6 +1020,7 @@ function renderKeyValueEditor(containerId, rows, options = {}) {
       valInput.value = row.value || '';
       valInput.addEventListener('input', () => {
         row.value = valInput.value;
+        applyEmptyHighlight(div, row);
         if (onChange) onChange(rows);
         maybeAddRow(idx);
       });
@@ -1140,6 +1151,7 @@ function renderParamsEditor() {
       allowTrailingEmpty: false,
       canDuplicateRows: true,
       enforceSingleEnabledByKey: true,
+      highlightWhenEmpty: true,
     });
   }
 }
@@ -1191,18 +1203,26 @@ function pathVarRowsEqual(a, b) {
 // Extract :param tokens from URL path and sync to pathVarsRows.
 // Duplicate declarations are preserved so users can keep several candidate
 // values for the same token and enable the one they want to send.
+//
+// Preserve row object identity (no cloning) and mutate the array in place —
+// renderKeyValueEditor's per-row input listeners capture the row reference at
+// render time, and any reassignment to pathVarsRows would orphan those
+// references so subsequent keystrokes mutate a row no longer in the array.
 function syncUrlToPathVars() {
   const paramNames = extractPathVarNames();
   const allowed = new Set(paramNames);
 
-  const existingRows = pathVarsRows
-    .filter(row => row.key && allowed.has(row.key))
-    .map(row => ({ ...row }));
+  const existingByKey = new Map();
+  for (const row of pathVarsRows) {
+    if (!row.key || !allowed.has(row.key)) continue;
+    if (!existingByKey.has(row.key)) existingByKey.set(row.key, []);
+    existingByKey.get(row.key).push(row);
+  }
 
   const newRows = [];
   for (const name of paramNames) {
-    const matches = existingRows.filter(row => row.key === name);
-    if (matches.length > 0) {
+    const matches = existingByKey.get(name);
+    if (matches && matches.length > 0) {
       newRows.push(...matches);
     } else {
       newRows.push({ key: name, value: '', description: '', enabled: true });
@@ -1221,7 +1241,8 @@ function syncUrlToPathVars() {
 
   const changed = !pathVarRowsEqual(newRows, pathVarsRows);
 
-  pathVarsRows = newRows;
+  pathVarsRows.length = 0;
+  pathVarsRows.push(...newRows);
   if (changed) renderParamsEditor();
 }
 
@@ -1779,11 +1800,15 @@ async function sendRequest() {
     // Re-resolve URL
     url = resolveVariables(requestData.url || document.getElementById('api-url').value);
 
-    // Replace :param path variables with their values
+    // Replace :param path variables with their values.
+    // Skip empty values so the literal :param stays in the URL and the
+    // request fails loudly instead of silently collapsing to a sibling route
+    // (e.g. /employees/:id with empty id would otherwise hit /employees/).
     for (const pv of pathVarsRows) {
-      if (pv.key && pv.enabled !== false) {
-        url = url.replace(new RegExp(':' + pv.key + '(?=/|\\?|$)', 'g'), encodeURIComponent(resolveVariables(pv.value || '')));
-      }
+      if (!pv.key || pv.enabled === false) continue;
+      const resolvedValue = resolveVariables(pv.value || '');
+      if (!resolvedValue) continue;
+      url = url.replace(new RegExp(':' + pv.key + '(?=/|\\?|$)', 'g'), encodeURIComponent(resolvedValue));
     }
 
     // Re-resolve headers (from requestData which may have been mutated by pre-scripts)
