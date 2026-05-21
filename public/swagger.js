@@ -2376,6 +2376,14 @@ function evalJsonPath(root, expr) {
 
 function renderResponseBody(container, response) {
   container.innerHTML = '';
+  const contentType = Object.entries(response.headers || {}).find(([k]) => k.toLowerCase() === 'content-type')?.[1] || '';
+  const normalizedContentType = String(contentType || '').toLowerCase();
+  const isImageResponse = normalizedContentType.startsWith('image/');
+  const imageDataUrl = isImageResponse && response.body
+    ? response.bodyEncoding === 'base64'
+      ? `data:${contentType || 'image/png'};base64,${response.body}`
+      : `data:${contentType || 'image/png'},${encodeURIComponent(response.body)}`
+    : '';
 
   // Detect whether the response body is valid JSON up-front
   let isJson = false;
@@ -2386,10 +2394,13 @@ function renderResponseBody(container, response) {
   const controls = document.createElement('div');
   controls.className = 'api-response-body-controls';
 
-  let viewMode = 'pretty';
+  let viewMode = isImageResponse ? 'preview' : 'pretty';
   const prettyBtn = document.createElement('button');
   prettyBtn.className = 'btn active';
-  prettyBtn.textContent = 'Pretty';
+  prettyBtn.textContent = isImageResponse ? 'Preview' : 'Pretty';
+  const hexBtn = document.createElement('button');
+  hexBtn.className = 'btn';
+  hexBtn.textContent = 'Hex';
   const rawBtn = document.createElement('button');
   rawBtn.className = 'btn';
   rawBtn.textContent = 'Raw';
@@ -2408,6 +2419,7 @@ function renderResponseBody(container, response) {
   searchToggleBtn.textContent = '🔍';
 
   controls.appendChild(prettyBtn);
+  if (isImageResponse) controls.appendChild(hexBtn);
   controls.appendChild(rawBtn);
   controls.appendChild(copyBtn);
   const ctrlSpacer = document.createElement('span');
@@ -2513,6 +2525,58 @@ function renderResponseBody(container, response) {
   let wholeWord = false;
   let useRegex = false;
   let jsonpathExpr = '';
+
+  function toHex(body, encoding) {
+    if (!body) return '';
+    let bytes;
+    if (encoding === 'base64') {
+      try {
+        const binary = atob(body);
+        bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      } catch {
+        bytes = new TextEncoder().encode(body);
+      }
+    } else {
+      bytes = new TextEncoder().encode(body);
+    }
+
+    const lines = [];
+    for (let i = 0; i < bytes.length; i += 16) {
+      const chunk = bytes.slice(i, i + 16);
+      const offset = i.toString(16).padStart(8, '0');
+      const hex = Array.from(chunk).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      lines.push(`${offset}  ${hex}`);
+    }
+    return lines.join('\n');
+  }
+
+  function renderImagePreview() {
+    content.classList.add('api-response-body-image-mode');
+    content.innerHTML = '';
+    if (!imageDataUrl) {
+      content.textContent = 'No image body to preview.';
+      return;
+    }
+
+    const img = document.createElement('img');
+    img.className = 'api-response-preview-image';
+    img.src = imageDataUrl;
+    img.alt = 'Response image preview';
+
+    const err = document.createElement('div');
+    err.className = 'api-response-preview-error';
+    err.textContent = 'Could not render image. Check response format.';
+    err.style.display = 'none';
+
+    img.addEventListener('error', () => {
+      img.style.display = 'none';
+      err.style.display = '';
+    });
+
+    content.appendChild(img);
+    content.appendChild(err);
+  }
 
   function buildSearchRegex(term) {
     if (!term) return null;
@@ -2689,6 +2753,20 @@ function renderResponseBody(container, response) {
 
   // ── Main render function ───────────────────────────────────────────────────
   function render() {
+    if (isImageResponse && viewMode === 'preview') {
+      jsonpathStatus.textContent = '';
+      renderImagePreview();
+      return;
+    }
+
+    content.classList.remove('api-response-body-image-mode');
+
+    if (viewMode === 'hex') {
+      content.textContent = toHex(response.body || '', response.bodyEncoding);
+      jsonpathStatus.textContent = '';
+      return;
+    }
+
     if (viewMode === 'pretty') {
       try {
         let parsed = JSON.parse(response.body);
@@ -2722,16 +2800,29 @@ function renderResponseBody(container, response) {
   }
 
   prettyBtn.addEventListener('click', () => {
-    viewMode = 'pretty';
+    viewMode = isImageResponse ? 'preview' : 'pretty';
     prettyBtn.classList.add('active');
+    if (hexBtn) hexBtn.classList.remove('active');
     rawBtn.classList.remove('active');
     render();
     if (searchInput.value && searchBar.style.display !== 'none') applyHighlights();
   });
 
+  if (isImageResponse) {
+    hexBtn.addEventListener('click', () => {
+      viewMode = 'hex';
+      hexBtn.classList.add('active');
+      rawBtn.classList.remove('active');
+      prettyBtn.classList.remove('active');
+      render();
+      if (searchInput.value && searchBar.style.display !== 'none') applyHighlights();
+    });
+  }
+
   rawBtn.addEventListener('click', () => {
     viewMode = 'raw';
     rawBtn.classList.add('active');
+    if (hexBtn) hexBtn.classList.remove('active');
     prettyBtn.classList.remove('active');
     render();
     if (searchInput.value && searchBar.style.display !== 'none') applyHighlights();
