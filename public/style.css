@@ -4548,6 +4548,26 @@ mark.api-search-highlight.current {
   font-size: 11px;
 }
 
+.api-response-body-content.api-response-body-image-mode {
+  white-space: normal;
+  text-align: center;
+  padding: 12px;
+}
+
+.api-response-preview-image {
+  max-width: 100%;
+  max-height: 560px;
+  border: 1px solid var(--surface1);
+  border-radius: 4px;
+  background: var(--mantle);
+}
+
+.api-response-preview-error {
+  color: var(--red);
+  font-size: 11px;
+  margin-top: 8px;
+}
+
 /* --- Response Headers --- */
 .api-response-headers-list {
   font-family: var(--font-mono);

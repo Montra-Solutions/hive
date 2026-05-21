@@ -3963,6 +3963,27 @@ app.delete('/api/proxy/allowlist/:host', (req, res) => {
   res.json({ hosts: saveProxyAllowlist(list) });
 });
 
+function isTextualResponseContentType(contentType) {
+  const ct = String(contentType || '').toLowerCase();
+  return ct.startsWith('text/')
+    || ct.includes('json')
+    || ct.includes('xml')
+    || ct.includes('javascript')
+    || ct.includes('x-www-form-urlencoded')
+    || ct.includes('svg');
+}
+
+async function readProxyResponsePayload(response) {
+  const contentType = response.headers.get('content-type') || '';
+  if (isTextualResponseContentType(contentType)) {
+    const body = await response.text();
+    return { body, bodyEncoding: 'utf-8', size: Buffer.byteLength(body, 'utf-8') };
+  }
+
+  const buf = Buffer.from(await response.arrayBuffer());
+  return { body: buf.toString('base64'), bodyEncoding: 'base64', size: buf.length };
+}
+
 // ---------------------------------------------------------------------------
 // API Client — proxy endpoint
 // ---------------------------------------------------------------------------
@@ -4053,7 +4074,7 @@ app.post('/api/proxy', async (req, res) => {
     }
 
     const time = Date.now() - start;
-    const responseBody = await response.text();
+    const payload = await readProxyResponsePayload(response);
     const responseHeaders = {};
     response.headers.forEach((val, key) => { responseHeaders[key] = val; });
 
@@ -4061,9 +4082,10 @@ app.post('/api/proxy', async (req, res) => {
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders,
-      body: responseBody,
+      body: payload.body,
+      bodyEncoding: payload.bodyEncoding,
       time,
-      size: Buffer.byteLength(responseBody, 'utf-8'),
+      size: payload.size,
     });
   } catch (err) {
     // Include the underlying cause (e.g. ECONNREFUSED) for better debugging
@@ -4130,7 +4152,7 @@ app.post('/api/proxy/upload', upload.any(), async (req, res) => {
 
     const response = await fetch(_target_url, fetchOpts);
     const time = Date.now() - start;
-    const responseBody = await response.text();
+    const payload = await readProxyResponsePayload(response);
     const responseHeaders = {};
     response.headers.forEach((val, key) => { responseHeaders[key] = val; });
 
@@ -4138,9 +4160,10 @@ app.post('/api/proxy/upload', upload.any(), async (req, res) => {
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders,
-      body: responseBody,
+      body: payload.body,
+      bodyEncoding: payload.bodyEncoding,
       time,
-      size: Buffer.byteLength(responseBody, 'utf-8'),
+      size: payload.size,
     });
   } catch (err) {
     const detail = err.cause ? `${err.message}: ${err.cause.message || err.cause.code || err.cause}` : err.message;
