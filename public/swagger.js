@@ -1384,6 +1384,135 @@ function renderAuthPanel() {
 let bodyMode = 'none';
 let bodyContent = '';
 let bodyFormData = [{ key: '', value: '', enabled: false }];
+let bodyJsonError = null;
+
+function getJsonBodyErrorDetails(source, message) {
+  const details = { message, index: -1, length: 1 };
+  const validJsonKeywords = new Set(['true', 'false', 'null']);
+  const positionMatch = message.match(/position\s+(\d+)/i);
+  if (positionMatch) {
+    details.index = Math.max(0, Math.min(source.length, Number(positionMatch[1])));
+  }
+
+  const tokenMatch = message.match(/Unexpected token '([^']+)'/i)
+    || message.match(/Unexpected non-whitespace character after JSON at position\s+\d+\s+\(line\s+\d+\s+column\s+\d+\)\s+in JSON at position\s+\d+/i)
+    || message.match(/Expected ',' or '}' after property value in JSON at position\s+(\d+)/i);
+  if (details.index >= 0 && tokenMatch && tokenMatch[1]) {
+    details.length = Math.max(tokenMatch[1].length, 1);
+  }
+
+  if (details.index < 0) {
+    const lineColumnMatch = message.match(/line\s+(\d+)\s+column\s+(\d+)/i);
+    if (lineColumnMatch) {
+      const targetLine = Math.max(1, Number(lineColumnMatch[1]));
+      const targetColumn = Math.max(1, Number(lineColumnMatch[2]));
+      let line = 1;
+      let column = 1;
+      for (let i = 0; i < source.length; i += 1) {
+        if (line === targetLine && column === targetColumn) {
+          details.index = i;
+          break;
+        }
+        if (source[i] === '\n') {
+          line += 1;
+          column = 1;
+        } else {
+          column += 1;
+        }
+      }
+      if (details.index < 0 && line === targetLine && column === targetColumn) {
+        details.index = source.length;
+      }
+    }
+  }
+
+  if (details.index < 0) {
+    const invalidTokenMatch = tokenMatch && tokenMatch[1]
+      ? Array.from(source.matchAll(/:\s*([A-Za-z_][\w-]*)/g)).find((match) => {
+          const candidate = match[1];
+          return !validJsonKeywords.has(candidate) && candidate.startsWith(tokenMatch[1]);
+        })
+      : null;
+    if (invalidTokenMatch && typeof invalidTokenMatch.index === 'number') {
+      details.index = invalidTokenMatch.index + invalidTokenMatch[0].indexOf(invalidTokenMatch[1]);
+      details.length = invalidTokenMatch[1].length;
+    }
+  }
+
+  if (details.index < 0) {
+    const barewordMatch = source.match(/:\s*([A-Za-z_][\w-]*)/);
+    if (barewordMatch && typeof barewordMatch.index === 'number') {
+      const matches = Array.from(source.matchAll(/:\s*([A-Za-z_][\w-]*)/g));
+      const firstInvalidBareword = matches.find((match) => !validJsonKeywords.has(match[1]));
+      const selectedMatch = firstInvalidBareword || barewordMatch;
+      details.index = selectedMatch.index + selectedMatch[0].indexOf(selectedMatch[1]);
+      details.length = selectedMatch[1].length;
+    }
+  }
+
+  if (details.index >= 0) {
+    const charAtIndex = source.slice(details.index, details.index + details.length);
+    if (/\s/.test(charAtIndex)) {
+      const nextNonWhitespace = source.slice(details.index).search(/\S/);
+      if (nextNonWhitespace >= 0) details.index += nextNonWhitespace;
+    }
+    while (details.index > 0 && /\s/.test(source[details.index])) details.index += 1;
+    if (details.index >= source.length) details.index = Math.max(0, source.length - 1);
+    if (details.index >= 0 && details.length === 1 && /[A-Za-z_]/.test(source[details.index] || '')) {
+      const token = source.slice(details.index).match(/^[A-Za-z_][\w-]*/);
+      if (token) details.length = token[0].length;
+    }
+  }
+
+  return details;
+}
+
+function setJsonBodyError(message) {
+  bodyJsonError = getJsonBodyErrorDetails(bodyContent, message);
+}
+
+function clearJsonBodyError() {
+  bodyJsonError = null;
+}
+
+function renderJsonBodyPreview(source, errorDetails) {
+  const codeEl = document.createElement('code');
+  codeEl.className = 'language-json';
+
+  if (!source) {
+    codeEl.innerHTML = '<span class="hljs-punctuation">{</span><span class="hljs-punctuation">}</span>';
+    return codeEl;
+  }
+
+  const hasHighlight = errorDetails && errorDetails.index >= 0 && errorDetails.index < source.length;
+  const before = hasHighlight ? source.slice(0, errorDetails.index) : source;
+  const invalid = hasHighlight ? source.slice(errorDetails.index, errorDetails.index + Math.max(errorDetails.length || 1, 1)) : '';
+  const after = hasHighlight ? source.slice(errorDetails.index + Math.max(errorDetails.length || 1, 1)) : '';
+
+  const highlightJson = (text) => {
+    if (!text) return '';
+    if (typeof hljs !== 'undefined') return hljs.highlight(text, { language: 'json', ignoreIllegals: true }).value;
+    return esc(text);
+  };
+
+  codeEl.innerHTML = hasHighlight
+    ? `${highlightJson(before)}<mark class="api-json-error-token">${esc(invalid)}</mark>${highlightJson(after)}`
+    : highlightJson(source);
+  return codeEl;
+}
+
+function formatJsonBodyContent() {
+  if (bodyMode !== 'json') return;
+  try {
+    bodyContent = JSON.stringify(JSON.parse(bodyContent), null, 2);
+    clearJsonBodyError();
+    renderBodyPanel();
+    markTabDirtyIfNeeded();
+  } catch (err) {
+    setJsonBodyError(err.message);
+    renderBodyPanel();
+  }
+}
 
 function renderBodyPanel() {
   const container = document.getElementById('api-reqtab-body');
@@ -1400,19 +1529,39 @@ function renderBodyPanel() {
     radio.name = 'body-mode';
     radio.value = m;
     radio.checked = m === bodyMode;
-    radio.addEventListener('change', () => { bodyMode = m; renderBodyPanel(); markTabDirtyIfNeeded(); });
+    radio.addEventListener('change', () => {
+      bodyMode = m;
+      if (bodyMode !== 'json') clearJsonBodyError();
+      renderBodyPanel();
+      markTabDirtyIfNeeded();
+    });
     label.appendChild(radio);
     label.appendChild(document.createTextNode(' ' + m));
     modeBar.appendChild(label);
   }
+  const formatBtn = document.createElement('button');
+  formatBtn.type = 'button';
+  formatBtn.className = 'btn api-body-format-btn';
+  formatBtn.textContent = 'Format';
+  formatBtn.title = 'Format and validate JSON body';
+  formatBtn.disabled = bodyMode !== 'json';
+  formatBtn.addEventListener('click', formatJsonBodyContent);
+  modeBar.appendChild(formatBtn);
   container.appendChild(modeBar);
 
   if (bodyMode === 'json' || bodyMode === 'raw') {
+    const editorWrap = document.createElement('div');
+    editorWrap.className = 'api-body-editor';
+
     const textarea = document.createElement('textarea');
     textarea.className = 'api-body-textarea';
+    if (bodyMode === 'json' && bodyJsonError) textarea.classList.add('api-body-textarea-invalid');
     textarea.value = bodyContent;
     textarea.placeholder = bodyMode === 'json' ? '{\n  "key": "value"\n}' : 'Raw body content';
-    textarea.addEventListener('input', () => { bodyContent = textarea.value; markTabDirtyIfNeeded(); });
+    textarea.addEventListener('input', () => {
+      bodyContent = textarea.value;
+      markTabDirtyIfNeeded();
+    });
     // Tab key inserts spaces
     textarea.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') {
@@ -1425,8 +1574,23 @@ function renderBodyPanel() {
       }
     });
     attachVariableTooltip(textarea);
-    container.appendChild(textarea);
+    editorWrap.appendChild(textarea);
+
+    if (bodyMode === 'json' && bodyJsonError) {
+      const errorEl = document.createElement('div');
+      errorEl.className = 'api-body-json-error';
+      errorEl.textContent = 'Invalid JSON: ' + bodyJsonError.message;
+      editorWrap.appendChild(errorEl);
+
+      const preview = document.createElement('pre');
+      preview.className = 'api-body-json-preview';
+      preview.appendChild(renderJsonBodyPreview(bodyContent, bodyJsonError));
+      editorWrap.appendChild(preview);
+    }
+
+    container.appendChild(editorWrap);
   } else if (bodyMode === 'form-data' || bodyMode === 'x-www-form-urlencoded') {
+    clearJsonBodyError();
     const kvContainer = document.createElement('div');
     kvContainer.id = 'api-body-kv';
     container.appendChild(kvContainer);
