@@ -4317,6 +4317,12 @@ a.af-row:hover .af-text { text-decoration: underline; }
   cursor: not-allowed;
 }
 
+.api-body-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .api-body-textarea {
   width: 100%;
   min-height: 120px;
@@ -4334,6 +4340,53 @@ a.af-row:hover .af-text { text-decoration: underline; }
 }
 
 .api-body-textarea:focus { border-color: var(--blue); }
+
+.api-body-textarea-invalid {
+  border-color: var(--red);
+  box-shadow: 0 0 0 1px rgba(243, 139, 168, 0.18);
+}
+
+.api-body-textarea-invalid:focus {
+  border-color: var(--red);
+}
+
+.api-body-json-error {
+  padding: 8px 10px;
+  border: 1px solid rgba(243, 139, 168, 0.35);
+  border-radius: 4px;
+  background: rgba(243, 139, 168, 0.12);
+  color: var(--red);
+  font-size: 11px;
+}
+
+.api-body-json-preview {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--surface1);
+  border-radius: 4px;
+  background: var(--mantle);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.api-body-json-preview code {
+  font-family: inherit;
+}
+
+.api-json-error-token {
+  display: inline-block;
+  padding: 0 1px;
+  border-radius: 3px;
+  background: rgba(243, 139, 168, 0.2);
+  color: #f7c5d3;
+  text-decoration: underline wavy var(--red);
+  text-underline-offset: 2px;
+}
 
 /* --- Script Panel --- */
 .api-script-panel { display: flex; flex-direction: column; gap: 6px; }
