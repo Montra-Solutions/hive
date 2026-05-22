@@ -1385,6 +1385,17 @@ let bodyMode = 'none';
 let bodyContent = '';
 let bodyFormData = [{ key: '', value: '', enabled: false }];
 
+function formatJsonBodyContent() {
+  if (bodyMode !== 'json') return;
+  try {
+    bodyContent = JSON.stringify(JSON.parse(bodyContent), null, 2);
+    renderBodyPanel();
+    markTabDirtyIfNeeded();
+  } catch (err) {
+    alert(`Invalid JSON: ${err.message}`);
+  }
+}
+
 function renderBodyPanel() {
   const container = document.getElementById('api-reqtab-body');
   container.innerHTML = '';
@@ -1405,6 +1416,14 @@ function renderBodyPanel() {
     label.appendChild(document.createTextNode(' ' + m));
     modeBar.appendChild(label);
   }
+  const formatBtn = document.createElement('button');
+  formatBtn.type = 'button';
+  formatBtn.className = 'btn api-body-format-btn';
+  formatBtn.textContent = 'Format';
+  formatBtn.title = 'Format and validate JSON body';
+  formatBtn.disabled = bodyMode !== 'json';
+  formatBtn.addEventListener('click', formatJsonBodyContent);
+  modeBar.appendChild(formatBtn);
   container.appendChild(modeBar);
 
   if (bodyMode === 'json' || bodyMode === 'raw') {

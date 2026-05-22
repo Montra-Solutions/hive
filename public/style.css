@@ -4306,6 +4306,17 @@ a.af-row:hover .af-text { text-decoration: underline; }
 
 .api-body-mode-radio input { accent-color: var(--blue); }
 
+.api-body-format-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.api-body-format-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .api-body-textarea {
   width: 100%;
   min-height: 120px;
