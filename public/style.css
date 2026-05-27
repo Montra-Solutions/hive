@@ -5137,10 +5137,45 @@ mark.api-search-highlight.current {
 
 .api-coll-editor-footer {
   display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
   padding: 12px 16px;
   border-top: 1px solid var(--surface0);
+}
+
+.api-coll-editor-source {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--overlay1);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-coll-editor-source:empty {
+  display: none;
+}
+
+.api-coll-editor-source .api-coll-editor-source-label {
+  color: var(--overlay0);
+  margin-right: 4px;
+}
+
+.api-coll-editor-source .api-coll-editor-source-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  background: var(--surface1);
+  color: var(--subtext0);
+}
+
+.api-coll-editor-footer-actions {
+  display: flex;
+  gap: 8px;
 }
 
 /* --- Tools Tab --- */
