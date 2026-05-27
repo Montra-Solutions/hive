@@ -571,6 +571,7 @@ app.get('/api/config', (_req, res) => {
     dataDir: getDataDir(),
     apiDir: getApiDir(),
     privateDataDir: getPrivateDataDir(),
+    privateApiDir: getPrivateApiDir(),
     docsDir: getDocsDir(),
   });
 });
@@ -4583,20 +4584,28 @@ app.get('/api/collections', (_req, res) => {
     }
   }
 
-  // Merge: private overrides shared when ids collide
+  // Merge: private overrides shared when ids collide.
+  // A private entry whose id matches a shared one is a stale fork — keep its
+  // (latest) content but tag it _source:'shared' so the next save routes back
+  // to the shared file and the private duplicate gets cleared.
+  const sharedIds = new Set(shared.map(c => c.id));
   const privateIds = new Set(private_.map(c => c.id));
   const merged = [
     ...shared.filter(c => !privateIds.has(c.id)).map(c => ({ ...c, _source: 'shared' })),
-    ...private_.map(c => ({ ...c, _source: 'private' })),
+    ...private_.map(c => ({ ...c, _source: sharedIds.has(c.id) ? 'shared' : 'private' })),
   ];
   res.json(merged);
 });
 
 app.put('/api/collections', (req, res) => {
-  const target = req.query.target === 'shared' ? getApiDir() : getPrivateApiDir();
-  // Strip _source markers before saving
-  const cleaned = (Array.isArray(req.body) ? req.body : []).map(({ _source, ...rest }) => rest);
-  writeJsonFile('collections.json', cleaned, target);
+  const all = Array.isArray(req.body) ? req.body : [];
+  const shared = [];
+  const priv = [];
+  for (const { _source, ...rest } of all) {
+    (_source === 'shared' ? shared : priv).push(rest);
+  }
+  writeJsonFile('collections.json', shared, getApiDir());
+  writeJsonFile('collections.json', priv, getPrivateApiDir());
   res.json({ ok: true });
 });
 

@@ -3281,8 +3281,34 @@ async function loadCollections() {
     const res = await fetch('/api/collections');
     collections = await res.json();
   } catch { collections = []; }
+  rehydrateTabsFromCollections();
   renderCollectionsTree();
   updateUrlTooltip();
+}
+
+// After collections load (init or reload), re-link each tab's requestData by
+// looking up its persisted collectionPath. Without this, tabs restored from
+// localStorage before the fetch resolved would have currentRequestData=null,
+// causing Save to misfire as Save-As.
+function rehydrateTabsFromCollections() {
+  for (const tab of openTabs) {
+    const path = tab.collectionPath || [];
+    if (path.length >= 2) {
+      const coll = collections.find(c => c.id === path[0]);
+      if (coll) {
+        const reqId = path[path.length - 1];
+        tab.requestData = findRequestInCollection(coll, reqId) || null;
+      }
+    }
+  }
+  if (currentCollectionPath.length >= 2) {
+    const coll = collections.find(c => c.id === currentCollectionPath[0]);
+    if (coll) {
+      const reqId = currentCollectionPath[currentCollectionPath.length - 1];
+      const fresh = findRequestInCollection(coll, reqId);
+      if (fresh) currentRequestData = fresh;
+    }
+  }
 }
 
 async function saveCollections() {
@@ -3299,28 +3325,6 @@ async function reloadCollectionsFromDisk() {
   const dirty = openTabs.some(t => t._dirty);
   if (dirty && !confirm('You have unsaved changes in one or more tabs. Reload collections from disk anyway?')) return;
   await loadCollections();
-  // Re-hydrate requestData for all open tabs so stale object references are
-  // replaced with the freshly loaded collection data.
-  for (const tab of openTabs) {
-    const path = tab.collectionPath || [];
-    if (path.length >= 2) {
-      const coll = collections.find(c => c.id === path[0]);
-      if (coll) {
-        const reqId = path[path.length - 1];
-        const fresh = findRequestInCollection(coll, reqId);
-        tab.requestData = fresh || null;
-      }
-    }
-  }
-  // Re-resolve current request data for the active tab.
-  if (currentCollectionPath.length >= 2) {
-    const coll = collections.find(c => c.id === currentCollectionPath[0]);
-    if (coll) {
-      const reqId = currentCollectionPath[currentCollectionPath.length - 1];
-      const fresh = findRequestInCollection(coll, reqId);
-      if (fresh) currentRequestData = fresh;
-    }
-  }
   renderCollectionsTree();
 }
 
@@ -3882,6 +3886,7 @@ function openCollectionEditor(coll) {
   collEditorPostScript = coll.postScript || '';
   collEditorTestScript = coll.testScript || '';
   showCollEditorModal('Edit Collection: ' + (coll.name || 'Untitled'));
+  renderCollEditorSource(coll);
 }
 
 function openFolderEditor(coll, folder) {
@@ -3892,6 +3897,23 @@ function openFolderEditor(coll, folder) {
   collEditorPostScript = folder.postScript || '';
   collEditorTestScript = folder.testScript || '';
   showCollEditorModal('Edit Folder: ' + (folder.name || 'Untitled'));
+  renderCollEditorSource(null);
+}
+
+function renderCollEditorSource(coll) {
+  const el = document.getElementById('api-coll-editor-source');
+  if (!el) return;
+  if (!coll) { el.innerHTML = ''; return; }
+  const cfg = window.DASH_CONFIG || {};
+  const dir = coll._source === 'shared' ? cfg.apiDir : cfg.privateApiDir;
+  if (!dir) { el.innerHTML = ''; return; }
+  const sep = dir.includes('\\') ? '\\' : '/';
+  const path = dir + sep + 'collections.json';
+  const tag = coll._source === 'shared' ? 'shared' : 'private';
+  el.innerHTML =
+    '<span class="api-coll-editor-source-label">Source:</span>' +
+    '<span title="' + esc(path) + '">' + esc(path) + '</span>' +
+    '<span class="api-coll-editor-source-tag">' + esc(tag) + '</span>';
 }
 
 function showCollEditorModal(title) {
