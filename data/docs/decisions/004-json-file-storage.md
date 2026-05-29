@@ -24,7 +24,8 @@ data/
   metrics.json          — SQL metric widget definitions
   databases.json        — Database connection configs
   api/
-    collections.json    — API request collections
+    collections.json    — Manifest: ordered references to per-collection files
+    collections/        — One file per collection (<id>.json)
     environments.json   — Environment variable sets
     history.json        — Request execution log
   db-scripts/           — Saved SQL scripts (*.sql files)
@@ -32,8 +33,22 @@ data/
 ~/.config/hive/data/
   user-prefs.json       — Per-user preferences
   api/
-    collections.json    — Private API collections
+    collections.json    — Manifest for private collections
+    collections/        — Private per-collection files
 ```
+
+> **Update (2026-05): per-collection files.** Collections were originally a single
+> `collections.json` array. For a team sharing collections through a git repo
+> (`hivemind-montra`), one monolithic file meant every edit rewrote the whole file,
+> so any two people conflicted on every change. Collections are now stored one file
+> per collection under `api/collections/`, with `collections.json` reduced to a small
+> ordered manifest (`{ manifest: true, collections: [{ id, name, file }] }`). Editing
+> one collection touches only its file, so git diffs and merges are scoped per
+> collection. A startup migration (`migrateCollectionsToPerFile`) splits any legacy
+> array in place — it backs up the original to `collections.json.bak` and aborts if
+> the split does not round-trip. The server also watches `api/collections/` and emits
+> a `collections-changed` socket event so open dashboards silently reload when files
+> change externally (e.g. after a `git pull`).
 
 Read with `readFileSync`, write with `writeFileSync`, wrapped in `readJsonFile()` / `writeJsonFile()` helpers that handle missing files with defaults.
 
