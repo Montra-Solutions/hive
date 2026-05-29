@@ -818,36 +818,72 @@ function collectionFileName(id) {
 // Read all collections for an api dir. Supports both the manifest format
 // ({ manifest:true, collections:[{id,name,file}] } + per-file) and the legacy
 // format where collections.json is a flat array of full collection objects.
+//
+// Any per-collection file present on disk but missing from the manifest is
+// ADOPTED (added to the result), not ignored. This is deliberate: a file that
+// is not listed in the manifest must never be treated as a deletable orphan —
+// that is how hand-added or out-of-sync collections used to get destroyed.
+// Removing a collection is only ever done explicitly (DELETE endpoint), which
+// unlinks the file so there is nothing left to adopt.
 function readCollections(apiDir) {
   const idxPath = join(apiDir, 'collections.json');
-  if (!existsSync(idxPath)) return [];
-  let parsed;
-  try { parsed = JSON.parse(readFileSync(idxPath, 'utf-8')); } catch { return []; }
+  const dir = collectionsDir(apiDir);
+  const out = [];
+  const seenIds = new Set();
+  const seenFiles = new Set();
 
-  // Legacy: flat array of full collection objects
-  if (Array.isArray(parsed)) return parsed;
+  if (existsSync(idxPath)) {
+    let parsed;
+    try { parsed = JSON.parse(readFileSync(idxPath, 'utf-8')); } catch { parsed = null; }
 
-  // Manifest: object referencing per-collection files
-  if (parsed && Array.isArray(parsed.collections)) {
-    const dir = collectionsDir(apiDir);
-    const out = [];
-    for (const entry of parsed.collections) {
-      const file = entry.file || collectionFileName(entry.id);
-      const fp = join(dir, file);
-      if (!existsSync(fp)) {
-        console.warn(`  Collections: manifest references missing file ${file} — skipping`);
-        continue;
+    // Legacy: flat array of full collection objects (migration converts this)
+    if (Array.isArray(parsed)) return parsed;
+
+    // Manifest: object referencing per-collection files (preserves order)
+    if (parsed && Array.isArray(parsed.collections)) {
+      for (const entry of parsed.collections) {
+        const file = entry.file || collectionFileName(entry.id);
+        const fp = join(dir, file);
+        if (!existsSync(fp)) {
+          console.warn(`  Collections: manifest references missing file ${file} — skipping`);
+          continue;
+        }
+        try {
+          const coll = JSON.parse(readFileSync(fp, 'utf-8'));
+          out.push(coll);
+          if (coll && coll.id != null) seenIds.add(coll.id);
+          seenFiles.add(file);
+        } catch (e) { console.warn(`  Collections: failed to read ${file} — ${e.message}`); }
       }
-      try { out.push(JSON.parse(readFileSync(fp, 'utf-8'))); }
-      catch (e) { console.warn(`  Collections: failed to read ${file} — ${e.message}`); }
     }
-    return out;
   }
-  return [];
+
+  // Adopt per-collection files present on disk but not in the manifest.
+  if (existsSync(dir)) {
+    let files = [];
+    try { files = readdirSync(dir); } catch { files = []; }
+    for (const f of files) {
+      if (!f.endsWith('.json') || seenFiles.has(f)) continue;
+      try {
+        const coll = JSON.parse(readFileSync(join(dir, f), 'utf-8'));
+        if (coll && coll.id != null && !seenIds.has(coll.id)) {
+          out.push(coll);
+          seenIds.add(coll.id);
+          console.log(`  Collections: adopted unlisted file ${f}`);
+        }
+      } catch { /* skip unreadable file */ }
+    }
+  }
+
+  return out;
 }
 
 // Write all collections for an api dir as a manifest + one file per collection.
-// Per-collection files no longer present are deleted. Unchanged collections are
+// Non-destructive: it writes the given collections and the manifest, but NEVER
+// deletes per-collection files that are absent from `list`. A stale or partial
+// save therefore cannot destroy collections — at worst the manifest is briefly
+// incomplete, and readCollections re-adopts the on-disk files. Whole-collection
+// removal happens only via deleteCollectionFile(). Unchanged collections are
 // rewritten with identical bytes, so git shows no diff for untouched ones.
 function writeCollections(apiDir, list) {
   const arr = Array.isArray(list) ? list : [];
@@ -858,26 +894,46 @@ function writeCollections(apiDir, list) {
   _suppressCollWatchUntil = Date.now() + 2000;
 
   const manifest = { manifest: true, collections: [] };
-  const keep = new Set();
   const usedNames = new Set();
   for (const coll of arr) {
     let file = collectionFileName(coll.id);
     // Guard against two ids sanitizing to the same filename
     while (usedNames.has(file)) file = file.replace(/\.json$/, '_.json');
     usedNames.add(file);
-    keep.add(file);
     writeFileSync(join(dir, file), JSON.stringify(coll, null, 2), 'utf-8');
     manifest.collections.push({ id: coll.id, name: coll.name || '', file });
   }
 
-  // Remove orphaned per-collection files
-  try {
-    for (const f of readdirSync(dir)) {
-      if (f.endsWith('.json') && !keep.has(f)) unlinkSync(join(dir, f));
-    }
-  } catch { /* dir may not exist yet — ignore */ }
-
+  // NOTE: intentionally no orphan cleanup here — files absent from `list` are
+  // left untouched so a partial save can never delete a collection. Deletion is
+  // explicit via deleteCollectionFile().
   writeFileSync(join(apiDir, 'collections.json'), JSON.stringify(manifest, null, 2), 'utf-8');
+}
+
+// Explicitly remove a single collection: drop it from the manifest and unlink
+// its file. This is the ONLY path that deletes a collection from disk.
+function deleteCollectionFile(apiDir, id) {
+  const dir = collectionsDir(apiDir);
+  _suppressCollWatchUntil = Date.now() + 2000;
+
+  // Resolve the file from the manifest entry if present, else by id convention
+  let file = collectionFileName(id);
+  const idxPath = join(apiDir, 'collections.json');
+  if (existsSync(idxPath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(idxPath, 'utf-8'));
+      if (parsed && Array.isArray(parsed.collections)) {
+        const entry = parsed.collections.find(e => e.id === id);
+        if (entry && entry.file) file = entry.file;
+      }
+    } catch { /* fall back to id convention */ }
+  }
+
+  try { if (existsSync(join(dir, file))) unlinkSync(join(dir, file)); }
+  catch (e) { console.warn(`  Collections: failed to delete ${file} — ${e.message}`); }
+
+  // Rewrite the manifest from whatever remains on disk so it stays consistent
+  writeCollections(apiDir, readCollections(apiDir));
 }
 
 // One-time migration: split a legacy monolithic collections.json (a flat array)
@@ -4734,6 +4790,21 @@ app.put('/api/collections', (req, res) => {
   }
   writeCollections(getApiDir(), shared);
   writeCollections(getPrivateApiDir(), priv);
+  res.json({ ok: true });
+});
+
+// Explicitly delete a single collection. This is the only endpoint that removes
+// a collection from disk — the bulk PUT above never deletes. `source` selects
+// the shared or private store; when omitted we remove from whichever has it.
+app.delete('/api/collections/:id', (req, res) => {
+  const { id } = req.params;
+  const source = req.query.source;
+  if (!id) return res.status(400).json({ error: 'Missing collection id' });
+
+  const dirs = source === 'shared' ? [getApiDir()]
+    : source === 'private' ? [getPrivateApiDir()]
+    : [getApiDir(), getPrivateApiDir()];
+  for (const dir of dirs) deleteCollectionFile(dir, id);
   res.json({ ok: true });
 });
 
