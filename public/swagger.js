@@ -3936,7 +3936,10 @@ function renderCollEditorSource(coll) {
   const dir = coll._source === 'shared' ? cfg.apiDir : cfg.privateApiDir;
   if (!dir) { el.innerHTML = ''; return; }
   const sep = dir.includes('\\') ? '\\' : '/';
-  const path = dir + sep + 'collections.json';
+  // Each collection is stored in its own file under collections/<id>.json
+  // (filename derivation must match the server's collectionFileName()).
+  const fileName = (String(coll.id || '').replace(/[^a-zA-Z0-9_-]/g, '_') || 'collection') + '.json';
+  const path = [dir, 'collections', fileName].join(sep);
   const tag = coll._source === 'shared' ? 'shared' : 'private';
   el.innerHTML =
     '<span class="api-coll-editor-source-label">Source:</span>' +
