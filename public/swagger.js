@@ -1895,6 +1895,9 @@ async function sendRequest() {
   sendBtn.classList.add('sending');
   sendBtn.textContent = 'Sending...';
 
+  // Clear the previous response so stale results aren't shown while the new request is in flight
+  clearResponseArea();
+
   try {
     const method = document.getElementById('api-method').value;
     let url = document.getElementById('api-url').value;
@@ -2255,6 +2258,21 @@ function resolveAuth() {
 // ---------------------------------------------------------------------------
 // Render Response
 // ---------------------------------------------------------------------------
+// Wipe the Body/Result area (status bar, response tabs and their contents) so a
+// prior response is not left on screen while a new request is being sent.
+function clearResponseArea() {
+  const bar = document.getElementById('api-response-bar');
+  if (bar) bar.innerHTML = '<span class="api-response-placeholder">Sending…</span>';
+
+  const tabs = document.getElementById('api-response-tabs');
+  if (tabs) tabs.style.display = 'none';
+
+  ['body', 'headers', 'test-results', 'console'].forEach(t => {
+    const el = document.getElementById('api-restab-' + t);
+    if (el) { el.innerHTML = ''; el.style.display = 'none'; }
+  });
+}
+
 function renderResponse(response, testResults) {
   const bar = document.getElementById('api-response-bar');
   const tabs = document.getElementById('api-response-tabs');
