@@ -236,6 +236,16 @@ function initSwagger() {
   // Initialize open tabs (restores from localStorage or creates one empty tab)
   restoreTabs();
 
+  // Silently reload collections when they change on disk externally (git pull,
+  // a teammate's sync). Skip while any tab has unsaved edits so in-progress work
+  // isn't discarded — those changes are picked up on the next save/reload.
+  if (typeof socket !== 'undefined' && socket && typeof socket.on === 'function') {
+    socket.on('collections-changed', () => {
+      if (openTabs.some(t => t._dirty)) return;
+      loadCollections();
+    });
+  }
+
   // Background-load swagger spec for the Docs tab
   loadSwaggerSpec();
 }

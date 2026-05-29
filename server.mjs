@@ -794,6 +794,121 @@ function writeJsonFile(filename, data, dir = getDataDir()) {
   writeFileSync(join(dir, filename), JSON.stringify(data, null, 2), 'utf-8');
 }
 
+// ---------------------------------------------------------------------------
+// API Client — per-collection file storage
+// Collections are stored one file per collection under <apiDir>/collections/,
+// with collections.json acting as an ordered manifest that references them.
+// This keeps team-shared collections git-friendly: editing one collection
+// touches only its own file instead of one monolithic array that every team
+// member conflicts on.
+// ---------------------------------------------------------------------------
+
+// Set briefly while the server writes its own collection files so the watcher
+// does not bounce our own saves back to clients as an external-change reload.
+let _suppressCollWatchUntil = 0;
+function collectionsWatchSuppressed() { return Date.now() < _suppressCollWatchUntil; }
+
+function collectionsDir(apiDir) { return join(apiDir, 'collections'); }
+
+function collectionFileName(id) {
+  const safe = String(id || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+  return (safe || 'collection') + '.json';
+}
+
+// Read all collections for an api dir. Supports both the manifest format
+// ({ manifest:true, collections:[{id,name,file}] } + per-file) and the legacy
+// format where collections.json is a flat array of full collection objects.
+function readCollections(apiDir) {
+  const idxPath = join(apiDir, 'collections.json');
+  if (!existsSync(idxPath)) return [];
+  let parsed;
+  try { parsed = JSON.parse(readFileSync(idxPath, 'utf-8')); } catch { return []; }
+
+  // Legacy: flat array of full collection objects
+  if (Array.isArray(parsed)) return parsed;
+
+  // Manifest: object referencing per-collection files
+  if (parsed && Array.isArray(parsed.collections)) {
+    const dir = collectionsDir(apiDir);
+    const out = [];
+    for (const entry of parsed.collections) {
+      const file = entry.file || collectionFileName(entry.id);
+      const fp = join(dir, file);
+      if (!existsSync(fp)) {
+        console.warn(`  Collections: manifest references missing file ${file} — skipping`);
+        continue;
+      }
+      try { out.push(JSON.parse(readFileSync(fp, 'utf-8'))); }
+      catch (e) { console.warn(`  Collections: failed to read ${file} — ${e.message}`); }
+    }
+    return out;
+  }
+  return [];
+}
+
+// Write all collections for an api dir as a manifest + one file per collection.
+// Per-collection files no longer present are deleted. Unchanged collections are
+// rewritten with identical bytes, so git shows no diff for untouched ones.
+function writeCollections(apiDir, list) {
+  const arr = Array.isArray(list) ? list : [];
+  const dir = collectionsDir(apiDir);
+  ensureDir(apiDir);
+  ensureDir(dir);
+
+  _suppressCollWatchUntil = Date.now() + 2000;
+
+  const manifest = { manifest: true, collections: [] };
+  const keep = new Set();
+  const usedNames = new Set();
+  for (const coll of arr) {
+    let file = collectionFileName(coll.id);
+    // Guard against two ids sanitizing to the same filename
+    while (usedNames.has(file)) file = file.replace(/\.json$/, '_.json');
+    usedNames.add(file);
+    keep.add(file);
+    writeFileSync(join(dir, file), JSON.stringify(coll, null, 2), 'utf-8');
+    manifest.collections.push({ id: coll.id, name: coll.name || '', file });
+  }
+
+  // Remove orphaned per-collection files
+  try {
+    for (const f of readdirSync(dir)) {
+      if (f.endsWith('.json') && !keep.has(f)) unlinkSync(join(dir, f));
+    }
+  } catch { /* dir may not exist yet — ignore */ }
+
+  writeFileSync(join(apiDir, 'collections.json'), JSON.stringify(manifest, null, 2), 'utf-8');
+}
+
+// One-time migration: split a legacy monolithic collections.json (a flat array)
+// into per-collection files + a manifest. Backs up the original first and aborts
+// the rewrite if the split does not round-trip to the same collection set.
+function migrateCollectionsToPerFile(apiDir) {
+  const idxPath = join(apiDir, 'collections.json');
+  if (!existsSync(idxPath)) return;
+  let parsed;
+  try { parsed = JSON.parse(readFileSync(idxPath, 'utf-8')); } catch { return; }
+  if (!Array.isArray(parsed)) return; // already manifest format — nothing to do
+
+  const bak = idxPath + '.bak';
+  try { copyFileSync(idxPath, bak); }
+  catch (e) { console.error(`  Collections migration: backup failed (${e.message}) — skipping`); return; }
+
+  try {
+    writeCollections(apiDir, parsed);
+    const after = readCollections(apiDir);
+    const beforeIds = parsed.map(c => c.id).sort().join(',');
+    const afterIds = after.map(c => c.id).sort().join(',');
+    if (after.length !== parsed.length || beforeIds !== afterIds) {
+      throw new Error(`round-trip mismatch (${parsed.length} → ${after.length})`);
+    }
+    console.log(`  Collections migration: split ${parsed.length} collection(s) into per-file storage in ${apiDir}`);
+  } catch (e) {
+    try { copyFileSync(bak, idxPath); } catch { /* best effort */ }
+    console.error(`  Collections migration: aborted — ${e.message}. Original restored from ${bak}`);
+  }
+}
+
 const DEFAULT_ENVIRONMENTS = [
   { name: 'Demo', variables: [
     { key: 'baseUrl', value: 'https://httpbin.org', enabled: true },
@@ -801,12 +916,25 @@ const DEFAULT_ENVIRONMENTS = [
 ];
 
 // ---------------------------------------------------------------------------
+// Data migration: split monolithic collections.json into per-collection files
+// Runs before the other collection migrations so they operate on the new format.
+// ---------------------------------------------------------------------------
+(function migrateCollectionsStorage() {
+  try {
+    migrateCollectionsToPerFile(getApiDir());
+    migrateCollectionsToPerFile(getPrivateApiDir());
+  } catch (e) {
+    console.error('  Collections migration: unexpected error —', e.message);
+  }
+})();
+
+// ---------------------------------------------------------------------------
 // Data migration: fix auth "none" → "inherit" for imported Postman collections
 // In Postman, folders/requests with { type: "noauth" } or missing auth mean
 // "inherit from parent", but our earlier importer mapped them all to "none".
 // ---------------------------------------------------------------------------
 (function migrateAuthInherit() {
-  const collections = readJsonFile('collections.json', [], getApiDir());
+  const collections = readCollections(getApiDir());
   let changed = false;
 
   function fixAuth(node, isRoot) {
@@ -819,7 +947,7 @@ const DEFAULT_ENVIRONMENTS = [
   }
 
   for (const coll of collections) fixAuth(coll, true);
-  if (changed) writeJsonFile('collections.json', collections, getApiDir());
+  if (changed) writeCollections(getApiDir(), collections);
 })();
 
 // ---------------------------------------------------------------------------
@@ -827,7 +955,7 @@ const DEFAULT_ENVIRONMENTS = [
 // Existing imported collections may lack these fields.
 // ---------------------------------------------------------------------------
 (function migrateCollectionScriptsAndVars() {
-  const collections = readJsonFile('collections.json', [], getApiDir());
+  const collections = readCollections(getApiDir());
   let changed = false;
 
   function seedFields(node) {
@@ -842,7 +970,7 @@ const DEFAULT_ENVIRONMENTS = [
   }
 
   for (const coll of collections) seedFields(coll);
-  if (changed) writeJsonFile('collections.json', collections, getApiDir());
+  if (changed) writeCollections(getApiDir(), collections);
 })();
 
 // ---------------------------------------------------------------------------
@@ -4570,8 +4698,8 @@ app.post('/api/script/run', async (req, res) => {
 // API Client — collections CRUD
 // ---------------------------------------------------------------------------
 app.get('/api/collections', (_req, res) => {
-  let shared = readJsonFile('collections.json', [], getApiDir());
-  let private_ = readJsonFile('collections.json', [], getPrivateApiDir());
+  let shared = readCollections(getApiDir());
+  let private_ = readCollections(getPrivateApiDir());
 
   // Seed with demo collection on first run (write to shared)
   if (shared.length === 0 && private_.length === 0) {
@@ -4579,7 +4707,7 @@ app.get('/api/collections', (_req, res) => {
     if (existsSync(seedPath)) {
       try {
         shared = JSON.parse(readFileSync(seedPath, 'utf8'));
-        writeJsonFile('collections.json', shared, getApiDir());
+        writeCollections(getApiDir(), shared);
       } catch { /* ignore seed errors */ }
     }
   }
@@ -4604,8 +4732,8 @@ app.put('/api/collections', (req, res) => {
   for (const { _source, ...rest } of all) {
     (_source === 'shared' ? shared : priv).push(rest);
   }
-  writeJsonFile('collections.json', shared, getApiDir());
-  writeJsonFile('collections.json', priv, getPrivateApiDir());
+  writeCollections(getApiDir(), shared);
+  writeCollections(getPrivateApiDir(), priv);
   res.json({ ok: true });
 });
 
@@ -4752,9 +4880,9 @@ app.post('/api/collections/import', (req, res) => {
 
   // Append to existing collections (imports go to private by default)
   const target = req.query.target === 'shared' ? getApiDir() : getPrivateApiDir();
-  const collections = readJsonFile('collections.json', [], target);
+  const collections = readCollections(target);
   collections.push(collection);
-  writeJsonFile('collections.json', collections, target);
+  writeCollections(target, collections);
   res.json(collection);
 });
 
@@ -4937,9 +5065,9 @@ app.post('/api/collections/import-postman', (req, res) => {
   };
 
   const target = req.query.target === 'shared' ? getApiDir() : getPrivateApiDir();
-  const collections = readJsonFile('collections.json', [], target);
+  const collections = readCollections(target);
   collections.push(collection);
-  writeJsonFile('collections.json', collections, target);
+  writeCollections(target, collections);
 
   const totalRequests = collection.requests.length + collection.folders.reduce((sum, f) => sum + (f.requests?.length || 0), 0);
   res.json({ ...collection, _totalRequests: totalRequests });
@@ -6335,6 +6463,9 @@ httpServer.listen(PORT, '127.0.0.1', () => {
 
   // Live-reload: watch public/ for frontend changes → tell browsers to refresh
   initLiveReload();
+
+  // Watch API collections for external changes (git pull, teammate sync)
+  initCollectionsWatch();
 });
 
 // ---------------------------------------------------------------------------
@@ -6360,6 +6491,38 @@ function initLiveReload() {
   } catch (err) {
     console.error('  Live-reload: watch failed —', err.message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Watch the API collections directories for external changes (git pull, a
+// teammate's file sync) → tell browsers to silently reload their collections.
+// Our own saves are ignored via the _suppressCollWatchUntil window.
+// ---------------------------------------------------------------------------
+function initCollectionsWatch() {
+  const dirs = [...new Set([getApiDir(), getPrivateApiDir()])];
+  let debounce = null;
+  for (const apiDir of dirs) {
+    try {
+      ensureDir(collectionsDir(apiDir));
+      watch(apiDir, { recursive: true }, (_evt, filename) => {
+        if (!filename) return;
+        const f = String(filename).replace(/\\/g, '/');
+        // Only react to the manifest or per-collection files (not .bak backups)
+        if (f !== 'collections.json' && !/^collections\/.+\.json$/.test(f)) return;
+        if (f.endsWith('.bak')) return;
+        if (collectionsWatchSuppressed()) return; // our own write
+        clearTimeout(debounce);
+        debounce = setTimeout(() => {
+          if (collectionsWatchSuppressed()) return;
+          console.log(`  Collections: external change (${f}) — notifying clients`);
+          io.emit('collections-changed');
+        }, 200);
+      });
+    } catch (err) {
+      console.error(`  Collections watch failed for ${apiDir} —`, err.message);
+    }
+  }
+  console.log('  Collections: watching for external changes');
 }
 
 // ---------------------------------------------------------------------------
