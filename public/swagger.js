@@ -4370,10 +4370,16 @@ function renameRequest(req) {
   renderCollectionsTree();
 }
 
-function deleteCollection(coll) {
+async function deleteCollection(coll) {
   if (!confirm(`Delete collection "${coll.name}" and all its requests?`)) return;
+  // Delete explicitly server-side (the only path that removes a collection file).
+  // A whole-array save must never be the delete mechanism — that is what caused
+  // unrelated collections to disappear when the in-memory list was stale.
+  const source = coll._source === 'shared' ? 'shared' : 'private';
+  try {
+    await fetch('/api/collections/' + encodeURIComponent(coll.id) + '?source=' + source, { method: 'DELETE' });
+  } catch { /* fall through to local update + reload */ }
   collections = collections.filter(c => c.id !== coll.id);
-  saveCollections();
   renderCollectionsTree();
 }
 
