@@ -4449,6 +4449,24 @@ a.af-row:hover .af-text { text-decoration: underline; }
 .api-script-log.log { color: var(--subtext0); }
 
 /* --- Response Body --- */
+/* Body tab: pin the controls / {} JSONPath filter / search bar to the top and let
+   ONLY the response content scroll. Previously all four were siblings inside the
+   scrolling .api-tab-content, so searching/filtering scrolled the bar away with the
+   content (issue #20). Scoped to .api-response-body (the body tab only). */
+.api-response-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.api-response-body > .api-response-body-controls,
+.api-response-body > .api-jsonpath-bar,
+.api-response-body > .api-response-search-bar {
+  flex-shrink: 0;
+}
+.api-response-body > .api-response-body-content {
+  min-height: 0;
+}
+
 .api-response-body-controls {
   display: flex;
   gap: 6px;
