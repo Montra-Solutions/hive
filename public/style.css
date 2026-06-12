@@ -4288,7 +4288,14 @@ a.af-row:hover .af-text { text-decoration: underline; }
 .api-auth-field input:focus { border-color: var(--blue); }
 
 /* --- Body Panel --- */
+/* Body tab lays out as a column so the editor fills the panel height */
+#api-reqtab-body {
+  display: flex;
+  flex-direction: column;
+}
+
 .api-body-mode-bar {
+  flex-shrink: 0;
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
@@ -4321,10 +4328,13 @@ a.af-row:hover .af-text { text-decoration: underline; }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
 }
 
 .api-body-textarea {
   width: 100%;
+  flex: 1;
   min-height: 120px;
   padding: 8px;
   border: 1px solid var(--surface1);
@@ -4335,7 +4345,7 @@ a.af-row:hover .af-text { text-decoration: underline; }
   font-size: 11px;
   line-height: 1.5;
   outline: none;
-  resize: vertical;
+  resize: none;
   tab-size: 2;
 }
 
@@ -4360,6 +4370,7 @@ a.af-row:hover .af-text { text-decoration: underline; }
 }
 
 .api-body-json-preview {
+  min-height: 0;
   margin: 0;
   padding: 10px;
   border: 1px solid var(--surface1);
