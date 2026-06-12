@@ -4420,6 +4420,30 @@ a.af-row:hover .af-text { text-decoration: underline; }
 
 .api-script-textarea:focus { border-color: var(--blue); }
 
+/* Script tabs lock the editor to the panel height, like the body tab.
+   Scoped to the request-tab panels — the collection editor modal keeps
+   its resizable textareas since its body scrolls instead of flexing. */
+#api-reqtab-pre-script,
+#api-reqtab-post-script,
+#api-reqtab-tests {
+  display: flex;
+  flex-direction: column;
+}
+
+#api-reqtab-pre-script .api-script-panel,
+#api-reqtab-post-script .api-script-panel,
+#api-reqtab-tests .api-script-panel {
+  flex: 1;
+  min-height: 0;
+}
+
+#api-reqtab-pre-script .api-script-textarea,
+#api-reqtab-post-script .api-script-textarea,
+#api-reqtab-tests .api-script-textarea {
+  flex: 1;
+  resize: none;
+}
+
 .api-script-ref-toggle {
   font-size: 11px;
   color: var(--blue);
