@@ -17,6 +17,7 @@ const DOCS_TABS_KEY = 'dashboard_docs_tabs';
 let docTabs = [];      // [{ path, content, frontmatter, raw, scrollTop, isEditing }]
 let activeDocTab = -1; // index into docTabs
 let _docTabDragSrc = null;
+let docAutosaveTimer = null; // debounced autosave while editing
 
 function getActiveTab() {
   return docTabs[activeDocTab] || null;
@@ -652,9 +653,17 @@ function toggleEdit() {
         textarea.selectionStart = textarea.selectionEnd = start + 2;
       }
     });
+    // Autosave: debounce a save while the user is typing so an autorefresh
+    // can't wipe unsaved edits.
+    textarea.addEventListener('input', () => {
+      tab.raw = textarea.value;
+      clearTimeout(docAutosaveTimer);
+      docAutosaveTimer = setTimeout(() => saveDoc({ auto: true }), 1200);
+    });
     contentEl.appendChild(textarea);
     attachWikilinkAutocomplete(textarea);
   } else {
+    clearTimeout(docAutosaveTimer);
     // Switch to preview mode
     tab.isEditing = false;
 
@@ -685,14 +694,16 @@ function toggleEdit() {
   }
 }
 
-async function saveDoc() {
+async function saveDoc(opts = {}) {
+  const auto = opts.auto === true;
   const tab = getActiveTab();
   if (!tab) return;
   const textarea = document.getElementById('docs-edit-area');
   if (textarea) tab.raw = textarea.value;
 
   const saveBtn = document.getElementById('docs-save-btn');
-  if (saveBtn) { saveBtn.textContent = 'Saving...'; saveBtn.disabled = true; }
+  // Don't disable the button on autosave — the user may be mid-edit.
+  if (saveBtn) { saveBtn.textContent = auto ? 'Saving…' : 'Saving...'; if (!auto) saveBtn.disabled = true; }
 
   try {
     const res = await fetch('/api/docs/file', {
@@ -705,9 +716,10 @@ async function saveDoc() {
     if (saveBtn) { saveBtn.textContent = 'Saved!'; setTimeout(() => { if (saveBtn) saveBtn.textContent = 'Save'; }, 2000); }
     refreshDocsGitStatus();
   } catch (err) {
-    alert('Save failed: ' + err.message);
+    if (saveBtn) saveBtn.textContent = 'Save failed';
+    if (!auto) alert('Save failed: ' + err.message);
   } finally {
-    if (saveBtn) saveBtn.disabled = false;
+    if (saveBtn && !auto) saveBtn.disabled = false;
   }
 }
 

@@ -48,6 +48,7 @@ function initDatabase() {
   let connections = []; // local cache (passwords masked)
   let selectedConnId = localStorage.getItem(STORAGE_KEY_CONN) || '';
   let editingConnId = null;
+  let scriptAutosaveTimer = null; // debounced autosave for the open script file
 
   // ---------------------------------------------------------------------------
   // Query tabs
@@ -195,6 +196,12 @@ function initDatabase() {
     const tab = dbTabs.find(t => t.id === activeDbTabId);
     if (tab) tab.sql = editor.value;
     localStorage.setItem(STORAGE_KEY_SQL, editor.value);
+    // If a script file is open, debounce-save it to disk so an autorefresh
+    // can't wipe unsaved edits.
+    if (activeScriptPath) {
+      clearTimeout(scriptAutosaveTimer);
+      scriptAutosaveTimer = setTimeout(() => saveActiveScript({ auto: true }), 1200);
+    }
   });
 
   // Write mode styling
@@ -1394,7 +1401,7 @@ function initDatabase() {
     });
   };
 
-  async function saveActiveScript() {
+  async function saveActiveScript(opts = {}) {
     if (!activeScriptPath) return;
     try {
       const res = await fetch('/api/db/scripts/file', {
@@ -1403,7 +1410,8 @@ function initDatabase() {
         body: JSON.stringify({ path: activeScriptPath, content: editor.value }),
       });
       if (!res.ok) throw new Error('Save failed');
-      showToast('Saved ' + activeScriptPath, 'info');
+      // Autosave is silent on success to avoid toast spam; Ctrl+S still confirms.
+      if (!opts.auto) showToast('Saved ' + activeScriptPath, 'info');
     } catch (err) {
       showToast('Save failed: ' + err.message, 'error');
     }
