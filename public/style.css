@@ -3328,6 +3328,31 @@ a.af-row:hover .af-text { text-decoration: underline; }
   line-height: 1.5;
 }
 
+/* Rendered mermaid diagrams (replaces the ```mermaid``` code block). */
+.docs-rendered .mermaid {
+  background: var(--crust);
+  border: 1px solid var(--surface0);
+  border-radius: 6px;
+  padding: 16px;
+  margin: 8px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.docs-rendered .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Fallback when a diagram fails to parse: show the raw source as a code block. */
+.docs-rendered .mermaid-error {
+  text-align: left;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--subtext0);
+}
+
 .docs-rendered blockquote {
   border-left: 3px solid var(--surface1);
   padding: 4px 12px;
