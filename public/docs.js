@@ -2,7 +2,7 @@
    Dev Dashboard — Docs Browser (tabbed)
    ========================================================================== */
 
-/* global marked, hljs, esc */
+/* global marked, hljs, mermaid, esc */
 
 // SVG icon constants (ICON_FOLDER, ICON_FOLDER_OPEN, ICON_FILE, etc.) defined in app.js
 
@@ -568,6 +568,11 @@ function renderDocView(path, data) {
   contentEl.innerHTML = html;
   contentEl.scrollTop = 0;
 
+  // Render ```mermaid``` blocks as diagrams. This swaps the <pre><code> out for
+  // a <div class="mermaid"> BEFORE the hljs pass below, so those blocks aren't
+  // also syntax-highlighted.
+  renderMermaidBlocks(contentEl);
+
   // Apply syntax highlighting
   contentEl.querySelectorAll('pre code').forEach((block) => {
     if (typeof hljs !== 'undefined') hljs.highlightElement(block);
@@ -800,6 +805,51 @@ async function refreshDocsGitStatus() {
 // ---------------------------------------------------------------------------
 // Markdown rendering
 // ---------------------------------------------------------------------------
+// Mermaid is initialized lazily on first use so the CDN script can finish
+// loading and we only pay the cost when a doc actually has a diagram.
+let _mermaidInitialized = false;
+
+// Convert any ```mermaid``` fenced blocks (rendered by marked as
+// <pre><code class="language-mermaid">) into rendered diagrams. Each block is
+// replaced by a <div class="mermaid"> holding the raw diagram source, then
+// mermaid.run() swaps in the SVG. On a parse error the source is left visible
+// so a broken diagram never blanks the doc.
+function renderMermaidBlocks(container) {
+  if (typeof mermaid === 'undefined' || !container) return;
+
+  const codeBlocks = container.querySelectorAll('pre > code.language-mermaid');
+  if (!codeBlocks.length) return;
+
+  if (!_mermaidInitialized) {
+    // securityLevel 'strict' sanitizes labels and disables click handlers/scripts
+    // in diagram source. 'dark' matches the Catppuccin Mocha dashboard theme.
+    mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+    _mermaidInitialized = true;
+  }
+
+  const nodes = [];
+  codeBlocks.forEach((code) => {
+    const pre = code.closest('pre');
+    if (!pre) return;
+    const div = document.createElement('div');
+    div.className = 'mermaid';
+    // textContent decodes the HTML entities marked escaped (e.g. <br/>) back to
+    // the literal diagram source mermaid expects.
+    div.textContent = code.textContent;
+    pre.replaceWith(div);
+    nodes.push(div);
+  });
+
+  if (!nodes.length) return;
+
+  Promise.resolve(mermaid.run({ nodes })).catch(() => {
+    // Leave the raw source visible for any block mermaid couldn't render.
+    nodes.forEach((n) => {
+      if (!n.querySelector('svg')) n.classList.add('mermaid-error');
+    });
+  });
+}
+
 function renderMarkdown(content) {
   // Pre-process: Obsidian callouts
   content = content.replace(
