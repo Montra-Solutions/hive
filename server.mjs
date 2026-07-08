@@ -525,6 +525,12 @@ const app = express();
 const httpServer = createServer(app);
 const io = new SocketIO(httpServer);
 
+// Identifies this server process instance. Sent to each client on connect so
+// the browser can tell a real restart (new id → reload for fresh assets) from
+// a transient reconnect (same id → stay put). See the 'server-info' handler in
+// public/app.js.
+const SERVER_BOOT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 app.use(express.json({ limit: '50mb' }));
 // Allow cross-origin requests from dev servers (Vite on :8080)
 app.use((_req, res, next) => {
@@ -6168,6 +6174,8 @@ app.post('/api/claude/notify', express.json(), (req, res) => {
 // Socket.IO connection handler
 // ---------------------------------------------------------------------------
 io.on('connection', (socket) => {
+  // Let the client distinguish a real server restart from a transient reconnect.
+  socket.emit('server-info', { bootId: SERVER_BOOT_ID });
   // Send current state to new connection
   for (const [key, state] of logState) {
     socket.emit('service-status', { key, status: state.status });
@@ -6532,8 +6540,15 @@ httpServer.listen(PORT, '127.0.0.1', () => {
     }, 600000);
   }, 9000);
 
-  // Live-reload: watch public/ for frontend changes → tell browsers to refresh
-  initLiveReload();
+  // Live-reload: watch public/ for frontend changes → tell browsers to refresh.
+  // OFF by default: it's a dashboard-developer convenience, and on Windows the
+  // recursive fs.watch fires on editor saves, file-sync, antivirus and indexer
+  // touches — reloading the page "out of nowhere". Enable with HIVE_LIVE_RELOAD=true.
+  if (String(process.env.HIVE_LIVE_RELOAD).toLowerCase() === 'true') {
+    initLiveReload();
+  } else {
+    console.log('  Live-reload: disabled (set HIVE_LIVE_RELOAD=true to enable)');
+  }
 
   // Watch API collections for external changes (git pull, teammate sync)
   initCollectionsWatch();
