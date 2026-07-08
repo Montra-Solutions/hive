@@ -129,15 +129,20 @@ async function loadDashConfig() {
 }
 loadDashConfig().catch(() => {});
 
-// When the dashboard server restarts, Socket.IO auto-reconnects.
-// Force a page reload so the browser doesn't run with stale state.
-let _socketConnectedOnce = false;
-socket.on('connect', () => {
-  if (_socketConnectedOnce) {
-    console.log('[dashboard] Server reconnected — reloading page');
+// Force a page reload only when the SERVER actually restarted (new bootId),
+// not on every transient socket reconnect. Reloading on any reconnect meant
+// sleep/wake, a network blip, or a momentarily busy server refreshed the page
+// "out of nowhere". The server sends its bootId on each connection.
+let _serverBootId = null;
+socket.on('server-info', (info) => {
+  const bootId = info && info.bootId;
+  if (!bootId) return;
+  if (_serverBootId === null) {
+    _serverBootId = bootId;            // first connection — remember it
+  } else if (bootId !== _serverBootId) {
+    console.log('[dashboard] Server restarted — reloading page');
     location.reload();
   }
-  _socketConnectedOnce = true;
 });
 
 const ansi = new AnsiUp();

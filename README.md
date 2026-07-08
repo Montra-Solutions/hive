@@ -304,6 +304,13 @@ SENTRY_AUTH_TOKEN=your-sentry-token
 
 Or set them in your shell environment before running `npm start`.
 
+### Other environment flags
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `3333` | Port the dashboard listens on |
+| `HIVE_LIVE_RELOAD` | *(off)* | Set to `true` to auto-reload the browser when you edit files in `public/`. A convenience for developing the dashboard itself — leave it off for normal use, or the page reloads whenever an editor, file-sync, or antivirus touches those files. |
+
 ---
 
 ## Service Log Streaming
